@@ -1,0 +1,3 @@
+{"ts":"2026-05-19T00:00:00+02:00","event":"bootstrap","summary":"Created repo agent instructions, learning notes scaffold, and canonical execution state for main checkout."}
+{"ts":"2026-05-19T21:19:07+02:00","event":"setup-matt-pocock-skills","summary":"Configured local markdown issue tracker, default triage labels, and repo-specific single-context domain docs for engineering skills."}
+{"ts":"2026-05-19T21:20:22+02:00","event":"codex-agent-skills-sync","summary":"Mirrored the Agent skills setup into AGENTS.md so Codex reads the same issue tracker, triage, and domain-doc configuration."}
