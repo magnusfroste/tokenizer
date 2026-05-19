@@ -12,7 +12,127 @@ import (
 
 type Adapter interface {
 	Name() string
-	Complete(ctx context.Context, req *openai.ChatRequest) (*openai.ChatResponse, error)
+	Complete(ctx context.Context, req *NormalizedModelRequest) (*openai.ChatResponse, error)
+}
+
+// NormalizedModelRequest is the provider-neutral request shape used between
+// routing/policy/context processing and concrete provider adapters.
+type NormalizedModelRequest struct {
+	Model       string
+	Messages    []openai.Message
+	Temperature *float64
+	MaxTokens   *int
+	Stream      bool
+	Tools       []any
+	Metadata    map[string]any
+}
+
+func NormalizeChatRequest(req *openai.ChatRequest) *NormalizedModelRequest {
+	if req == nil {
+		return &NormalizedModelRequest{}
+	}
+	return &NormalizedModelRequest{
+		Model:       req.Model,
+		Messages:    append([]openai.Message(nil), req.Messages...),
+		Temperature: cloneFloat64Ptr(req.Temperature),
+		MaxTokens:   cloneIntPtr(req.MaxTokens),
+		Stream:      req.Stream,
+		Tools:       cloneAnySlice(req.Tools),
+		Metadata:    cloneMetadata(req.Metadata),
+	}
+}
+
+func (r *NormalizedModelRequest) ToOpenAI() *openai.ChatRequest {
+	if r == nil {
+		return &openai.ChatRequest{}
+	}
+	return &openai.ChatRequest{
+		Model:       r.Model,
+		Messages:    append([]openai.Message(nil), r.Messages...),
+		Temperature: cloneFloat64Ptr(r.Temperature),
+		MaxTokens:   cloneIntPtr(r.MaxTokens),
+		Stream:      r.Stream,
+		Tools:       cloneAnySlice(r.Tools),
+		Metadata:    cloneMetadata(r.Metadata),
+	}
+}
+
+func (r *NormalizedModelRequest) Clone() *NormalizedModelRequest {
+	if r == nil {
+		return &NormalizedModelRequest{}
+	}
+	return &NormalizedModelRequest{
+		Model:       r.Model,
+		Messages:    append([]openai.Message(nil), r.Messages...),
+		Temperature: cloneFloat64Ptr(r.Temperature),
+		MaxTokens:   cloneIntPtr(r.MaxTokens),
+		Stream:      r.Stream,
+		Tools:       cloneAnySlice(r.Tools),
+		Metadata:    cloneMetadata(r.Metadata),
+	}
+}
+
+func cloneMetadata(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = cloneAny(v)
+	}
+	return out
+}
+
+func cloneAnySlice(in []any) []any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]any, len(in))
+	for i, v := range in {
+		out[i] = cloneAny(v)
+	}
+	return out
+}
+
+func cloneAny(v any) any {
+	switch typed := v.(type) {
+	case map[string]any:
+		return cloneMetadata(typed)
+	case []any:
+		return cloneAnySlice(typed)
+	case map[string]string:
+		out := make(map[string]string, len(typed))
+		for k, value := range typed {
+			out[k] = value
+		}
+		return out
+	case []string:
+		return append([]string(nil), typed...)
+	case []map[string]any:
+		out := make([]map[string]any, len(typed))
+		for i, value := range typed {
+			out[i] = cloneMetadata(value)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+func cloneFloat64Ptr(in *float64) *float64 {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	return &out
+}
+
+func cloneIntPtr(in *int) *int {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	return &out
 }
 
 var (

@@ -4,7 +4,7 @@ This index is a retrieval map for reusable project lessons. Open only notes rele
 
 ## High-Signal Recurring Lessons
 
-No recurring lessons recorded yet.
+- 2026-05-19 - [Context Processor Timeout Isolation](2026-05-19-context-processor-timeout-isolation.md): open when adding mutable request processors, nested request cloning, timeout handling, or fail-open pipeline behavior.
 
 ## Routing
 
@@ -32,7 +32,7 @@ No notes yet.
 
 ## Performance
 
-No notes yet.
+- 2026-05-19 - [Context Processor Timeout Isolation](2026-05-19-context-processor-timeout-isolation.md): hard timeouts do not stop goroutines; deeply clone mutable request state and commit only on successful completion.
 
 ## Security
 
@@ -40,4 +40,6 @@ No notes yet.
 
 ## Chronological Notes
 
-No notes yet.
+| Date | Title | Retrieval cues |
+| --- | --- | --- |
+| 2026-05-19 | [Context Processor Timeout Isolation](2026-05-19-context-processor-timeout-isolation.md) | contextproc, hard timeout, goroutine, race, nested metadata/tools clone |

@@ -22,11 +22,11 @@ type MockAdapter struct {
 
 func (m *MockAdapter) Name() string { return "mock" }
 
-func (m *MockAdapter) Complete(ctx context.Context, req *openai.ChatRequest) (*openai.ChatResponse, error) {
+func (m *MockAdapter) Complete(ctx context.Context, req *NormalizedModelRequest) (*openai.ChatResponse, error) {
 	if _, err := url.Parse(m.BaseURL); err != nil {
 		return nil, fmt.Errorf("mock adapter: invalid base url: %w", err)
 	}
-	body, err := json.Marshal(req)
+	body, err := json.Marshal(req.ToOpenAI())
 	if err != nil {
 		return nil, fmt.Errorf("mock adapter: marshal: %w", err)
 	}
@@ -35,7 +35,11 @@ func (m *MockAdapter) Complete(ctx context.Context, req *openai.ChatRequest) (*o
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	resp, err := m.Client.Do(httpReq)
+	client := m.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, ErrProviderTimeout

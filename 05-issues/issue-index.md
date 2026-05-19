@@ -19,7 +19,8 @@ P2:
 ## Tillagda via triage (post-sprint-1)
 
 - ISSUE-061 — Rebrand `tokenix` → `tokenizer` (module path + product name). `type: refactor`, klar 2026-05-19.
-- ISSUE-062 — Context-processor pipeline (interface only). `type: design`, `ready-for-agent`. Designval landade i ADR-0013.
+- ISSUE-062 — Context-processor pipeline (interface only). `type: design`, klar 2026-05-19. Designval landade i ADR-0013.
+- ISSUE-063 — Policy-gated context pipeline activation. `type: backend`, `ready-for-agent`. Tracks ADR-0013 tenant-policy opt-in before real processors ship.
 
 ## Labelstandard
 

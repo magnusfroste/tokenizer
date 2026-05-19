@@ -31,6 +31,9 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 // Logger emits one structured log line per request after the handler returns.
 // Status, duration and request id are included; verb-specific bodies are not.
 func Logger(log *slog.Logger) func(http.Handler) http.Handler {
+	if log == nil {
+		log = slog.Default()
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()

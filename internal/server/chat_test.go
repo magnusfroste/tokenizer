@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/magnusfroste/tokenizer/internal/contextproc"
 	"github.com/magnusfroste/tokenizer/internal/openai"
 	"github.com/magnusfroste/tokenizer/internal/provider"
+	"github.com/magnusfroste/tokenizer/internal/router"
 )
 
 type fakeAdapter struct {
@@ -18,7 +22,7 @@ type fakeAdapter struct {
 }
 
 func (f *fakeAdapter) Name() string { return "fake" }
-func (f *fakeAdapter) Complete(ctx context.Context, req *openai.ChatRequest) (*openai.ChatResponse, error) {
+func (f *fakeAdapter) Complete(ctx context.Context, req *provider.NormalizedModelRequest) (*openai.ChatResponse, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -39,13 +43,7 @@ func postChat(t *testing.T, h http.Handler, body any) *httptest.ResponseRecorder
 }
 
 func TestChat_HappyPath(t *testing.T) {
-	want := &openai.ChatResponse{
-		ID:    "chatcmpl_test",
-		Model: "balanced-coder",
-		Choices: []openai.Choice{{
-			Message: openai.Message{Role: "assistant", Content: "hi"},
-		}},
-	}
+	want := testChatResponse()
 	h := ChatCompletionsHandler(&fakeAdapter{resp: want})
 
 	rec := postChat(t, h, openai.ChatRequest{
@@ -66,6 +64,77 @@ func TestChat_HappyPath(t *testing.T) {
 	if resp.ID != "chatcmpl_test" {
 		t.Fatalf("response not echoed: %#v", resp)
 	}
+}
+
+type chatTestProcessor struct {
+	result contextproc.Result
+	called bool
+}
+
+func (p *chatTestProcessor) Name() string { return "chat-test" }
+
+func (p *chatTestProcessor) Process(ctx context.Context, req *provider.NormalizedModelRequest, job *router.JobDescriptor) (contextproc.Result, error) {
+	p.called = true
+	return p.result, nil
+}
+
+func TestChat_ContextPipelineNoopDoesNotWriteSavingsHeader(t *testing.T) {
+	processor := &chatTestProcessor{result: contextproc.Result{TokensSaved: 0}}
+	h := chatHandlerWithProcessor(processor)
+
+	rec := postChat(t, h, openai.ChatRequest{
+		Model:    "auto",
+		Messages: []openai.Message{{Role: "user", Content: "hello"}},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !processor.called {
+		t.Fatal("expected context processor to run")
+	}
+	if got := rec.Header().Get("X-Router-Context-Savings"); got != "" {
+		t.Fatalf("expected no context savings header, got %q", got)
+	}
+}
+
+func TestChat_ContextPipelineWritesSavingsHeader(t *testing.T) {
+	processor := &chatTestProcessor{result: contextproc.Result{TokensSaved: 12}}
+	h := chatHandlerWithProcessor(processor)
+
+	rec := postChat(t, h, openai.ChatRequest{
+		Model:    "auto",
+		Messages: []openai.Message{{Role: "user", Content: "hello"}},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("X-Router-Context-Savings"); got != "12" {
+		t.Fatalf("expected context savings header, got %q", got)
+	}
+}
+
+func testChatResponse() *openai.ChatResponse {
+	return &openai.ChatResponse{
+		ID:    "chatcmpl_test",
+		Model: "balanced-coder",
+		Choices: []openai.Choice{{
+			Message: openai.Message{Role: "assistant", Content: "hi"},
+		}},
+	}
+}
+
+func chatHandlerWithProcessor(processor contextproc.Processor) http.Handler {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return ChatCompletionsHandler(&fakeAdapter{resp: testChatResponse()}, ChatOptions{
+		ContextPipelineEnabled: true,
+		ContextPipeline: &contextproc.Pipeline{
+			Processors: []contextproc.Processor{processor},
+			Logger:     logger,
+		},
+		Logger: logger,
+	})
 }
 
 func TestChat_EmptyMessagesRejected(t *testing.T) {

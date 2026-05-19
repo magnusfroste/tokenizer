@@ -1,3 +1,5 @@
 {"ts":"2026-05-19T00:00:00+02:00","event":"bootstrap","summary":"Created repo agent instructions, learning notes scaffold, and canonical execution state for main checkout."}
 {"ts":"2026-05-19T21:19:07+02:00","event":"setup-matt-pocock-skills","summary":"Configured local markdown issue tracker, default triage labels, and repo-specific single-context domain docs for engineering skills."}
 {"ts":"2026-05-19T21:20:22+02:00","event":"codex-agent-skills-sync","summary":"Mirrored the Agent skills setup into AGENTS.md so Codex reads the same issue tracker, triage, and domain-doc configuration."}
+{"ts":"2026-05-19T21:28:27+02:00","event":"complete-task","task":"ISSUE-062","summary":"Implemented context processor interface, no-op pipeline runner, feature-flagged chat hook, observability header/logging, timeout isolation, and regression tests."}
+{"ts":"2026-05-19T21:35:37+02:00","event":"create-task","task":"ISSUE-063","summary":"Added policy-gated context pipeline activation task and set it as the next runnable .ai task."}

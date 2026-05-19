@@ -7,15 +7,18 @@ import (
 	"net/http"
 
 	"github.com/magnusfroste/tokenizer/internal/auth"
+	"github.com/magnusfroste/tokenizer/internal/contextproc"
 	"github.com/magnusfroste/tokenizer/internal/middleware"
 	"github.com/magnusfroste/tokenizer/internal/provider"
 )
 
 type Config struct {
-	Logger    *slog.Logger
-	KeyStore  auth.KeyStore
-	Provider  provider.Adapter
-	Readiness []ReadyzChecker
+	Logger                 *slog.Logger
+	KeyStore               auth.KeyStore
+	Provider               provider.Adapter
+	ContextPipeline        *contextproc.Pipeline
+	ContextPipelineEnabled bool
+	Readiness              []ReadyzChecker
 }
 
 func New(cfg Config) http.Handler {
@@ -24,7 +27,11 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET /healthz", HealthzHandler())
 	mux.HandleFunc("GET /readyz", ReadyzHandler(cfg.Readiness...))
 
-	chat := ChatCompletionsHandler(cfg.Provider)
+	chat := ChatCompletionsHandler(cfg.Provider, ChatOptions{
+		ContextPipeline:        cfg.ContextPipeline,
+		ContextPipelineEnabled: cfg.ContextPipelineEnabled,
+		Logger:                 cfg.Logger,
+	})
 	mux.Handle("POST /v1/chat/completions", auth.Middleware(cfg.KeyStore)(chat))
 
 	return middleware.RequestID(middleware.Logger(cfg.Logger)(mux))
