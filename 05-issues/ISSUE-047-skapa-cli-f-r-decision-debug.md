@@ -1,11 +1,12 @@
 # ISSUE-047: Skapa CLI för decision debug
 
 ## Labels
-
 - `epic: EPIC-10`
 - `priority: P1`
 - `type: backend`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

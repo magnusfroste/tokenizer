@@ -1,11 +1,12 @@
 # ISSUE-043: Implementera provider allow/deny per projekt
 
 ## Labels
-
 - `epic: EPIC-09`
 - `priority: P1`
 - `type: security`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

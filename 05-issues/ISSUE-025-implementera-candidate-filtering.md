@@ -1,11 +1,12 @@
 # ISSUE-025: Implementera candidate filtering
 
 ## Labels
-
 - `epic: EPIC-05`
 - `priority: P0`
 - `type: backend`
 - `sprint: 05`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

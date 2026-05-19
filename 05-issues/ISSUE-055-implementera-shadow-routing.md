@@ -1,11 +1,12 @@
 # ISSUE-055: Implementera shadow routing
 
 ## Labels
-
 - `epic: EPIC-08`
 - `priority: P2`
 - `type: backend`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

@@ -1,11 +1,12 @@
 # ISSUE-027: Implementera fallback planning
 
 ## Labels
-
 - `epic: EPIC-05`
 - `priority: P0`
 - `type: backend`
 - `sprint: 05`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

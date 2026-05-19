@@ -1,11 +1,12 @@
 # ISSUE-040: Implementera acceptance feedback i dashboard
 
 ## Labels
-
 - `epic: EPIC-08`
 - `priority: P1`
 - `type: frontend`
 - `sprint: 07`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

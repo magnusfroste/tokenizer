@@ -1,11 +1,12 @@
 # ISSUE-030: Implementera fallback före first token
 
 ## Labels
-
 - `epic: EPIC-06`
 - `priority: P0`
 - `type: backend`
 - `sprint: 05`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

@@ -3,13 +3,13 @@
 # ISSUE-063: Policy-gated context pipeline activation
 
 ## Labels
-
 - `epic: EPIC-04`
 - `priority: P1`
 - `type: backend`
 - `state: ready-for-agent`
 - `adr: ADR-0013`
 - `sprint: 04`
+- `category: enhancement`
 
 ## Mål
 

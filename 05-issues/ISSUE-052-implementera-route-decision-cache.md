@@ -1,11 +1,12 @@
 # ISSUE-052: Implementera route decision cache
 
 ## Labels
-
 - `epic: EPIC-05`
 - `priority: P1`
 - `type: backend`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

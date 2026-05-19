@@ -1,11 +1,12 @@
 # ISSUE-057: Implementera RBAC skeleton
 
 ## Labels
-
 - `epic: EPIC-09`
 - `priority: P2`
 - `type: security`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

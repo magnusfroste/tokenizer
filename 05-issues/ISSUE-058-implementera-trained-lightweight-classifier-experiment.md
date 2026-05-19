@@ -1,11 +1,12 @@
 # ISSUE-058: Implementera trained lightweight classifier experiment
 
 ## Labels
-
 - `epic: EPIC-03`
 - `priority: P2`
 - `type: data`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

@@ -1,11 +1,12 @@
 # ISSUE-049: Skapa spend simulator
 
 ## Labels
-
 - `epic: EPIC-10`
 - `priority: P1`
 - `type: data`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

@@ -1,11 +1,12 @@
 # ISSUE-021: Implementera policy parser och validering
 
 ## Labels
-
 - `epic: EPIC-04`
 - `priority: P0`
 - `type: backend`
 - `sprint: 04`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

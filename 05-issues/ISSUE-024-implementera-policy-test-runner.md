@@ -1,11 +1,12 @@
 # ISSUE-024: Implementera policy test runner
 
 ## Labels
-
 - `epic: EPIC-04`
 - `priority: P0`
 - `type: test`
 - `sprint: 04`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

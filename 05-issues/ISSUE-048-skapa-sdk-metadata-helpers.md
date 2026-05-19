@@ -1,11 +1,12 @@
 # ISSUE-048: Skapa SDK metadata helpers
 
 ## Labels
-
 - `epic: EPIC-10`
 - `priority: P1`
 - `type: backend`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

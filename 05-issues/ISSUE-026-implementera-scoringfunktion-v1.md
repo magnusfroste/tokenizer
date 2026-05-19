@@ -1,11 +1,12 @@
 # ISSUE-026: Implementera scoringfunktion v1
 
 ## Labels
-
 - `epic: EPIC-05`
 - `priority: P0`
 - `type: backend`
 - `sprint: 05`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

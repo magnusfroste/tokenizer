@@ -1,11 +1,12 @@
 # ISSUE-037: Skapa eval dataset v1
 
 ## Labels
-
 - `epic: EPIC-08`
 - `priority: P1`
 - `type: product`
 - `sprint: 07`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

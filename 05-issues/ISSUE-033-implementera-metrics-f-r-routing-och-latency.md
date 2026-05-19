@@ -1,11 +1,12 @@
 # ISSUE-033: Implementera metrics för routing och latency
 
 ## Labels
-
 - `epic: EPIC-07`
 - `priority: P0`
 - `type: backend`
 - `sprint: 06`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

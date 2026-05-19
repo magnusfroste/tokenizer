@@ -1,11 +1,12 @@
 # ISSUE-002: Skapa /healthz och /readyz
 
 ## Labels
-
 - `epic: EPIC-01`
 - `priority: P0`
 - `type: backend`
 - `sprint: 01`
+- `category: enhancement`
+- `state: done`
 
 ## Mål
 

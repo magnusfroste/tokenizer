@@ -1,11 +1,12 @@
 # ISSUE-059: Implementera cost-quality frontier report
 
 ## Labels
-
 - `epic: EPIC-08`
 - `priority: P2`
 - `type: data`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

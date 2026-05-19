@@ -1,11 +1,12 @@
 # ISSUE-003: Implementera API key auth skeleton
 
 ## Labels
-
 - `epic: EPIC-09`
 - `priority: P0`
 - `type: security`
 - `sprint: 01`
+- `category: enhancement`
+- `state: done`
 
 ## Mål
 

@@ -1,11 +1,12 @@
 # ISSUE-022: Implementera compiled policy cache
 
 ## Labels
-
 - `epic: EPIC-04`
 - `priority: P0`
 - `type: backend`
 - `sprint: 04`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

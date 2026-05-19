@@ -3,11 +3,11 @@
 # ISSUE-062: Context-processor pipeline (interface only)
 
 ## Labels
-
 - `type: design`
 - `priority: P2`
 - `state: done`
 - `adr: ADR-0013`
+- `category: enhancement`
 
 ## Mål
 

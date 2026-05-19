@@ -1,11 +1,12 @@
 # ISSUE-041: Skapa regression suite för felrouting
 
 ## Labels
-
 - `epic: EPIC-08`
 - `priority: P1`
 - `type: test`
 - `sprint: 07`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

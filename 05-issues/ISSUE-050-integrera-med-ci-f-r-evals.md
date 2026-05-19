@@ -1,11 +1,12 @@
 # ISSUE-050: Integrera med CI för evals
 
 ## Labels
-
 - `epic: EPIC-08`
 - `priority: P1`
 - `type: infra`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

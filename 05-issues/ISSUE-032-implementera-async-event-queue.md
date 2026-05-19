@@ -1,11 +1,12 @@
 # ISSUE-032: Implementera async event queue
 
 ## Labels
-
 - `epic: EPIC-07`
 - `priority: P0`
 - `type: backend`
 - `sprint: 06`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

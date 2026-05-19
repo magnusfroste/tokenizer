@@ -1,11 +1,12 @@
 # ISSUE-001: Initiera repo och grundstruktur
 
 ## Labels
-
 - `epic: EPIC-01`
 - `priority: P0`
 - `type: infra`
 - `sprint: 01`
+- `category: enhancement`
+- `state: done`
 
 ## Mål
 

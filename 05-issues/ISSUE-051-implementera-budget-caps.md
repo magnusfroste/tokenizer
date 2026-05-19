@@ -1,11 +1,12 @@
 # ISSUE-051: Implementera budget caps
 
 ## Labels
-
 - `epic: EPIC-09`
 - `priority: P1`
 - `type: backend`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

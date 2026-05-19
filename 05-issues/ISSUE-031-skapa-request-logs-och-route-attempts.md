@@ -1,11 +1,12 @@
 # ISSUE-031: Skapa request_logs och route_attempts
 
 ## Labels
-
 - `epic: EPIC-07`
 - `priority: P0`
 - `type: data`
 - `sprint: 06`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

@@ -1,6 +1,5 @@
 // Package provider contains the provider-adapter interface and the in-tree
-// adapters. In sprint 1 only the mock adapter is implemented; real provider
-// adapters (OpenAI, Anthropic, ...) arrive in EPIC-06.
+// adapters.
 package provider
 
 import (
@@ -13,6 +12,16 @@ import (
 type Adapter interface {
 	Name() string
 	Complete(ctx context.Context, req *NormalizedModelRequest) (*openai.ChatResponse, error)
+}
+
+type StreamingAdapter interface {
+	Stream(ctx context.Context, req *NormalizedModelRequest) (<-chan StreamChunk, error)
+}
+
+type StreamChunk struct {
+	Data []byte
+	Done bool
+	Err  error
 }
 
 // NormalizedModelRequest is the provider-neutral request shape used between
@@ -138,6 +147,10 @@ func cloneIntPtr(in *int) *int {
 var (
 	ErrProviderTimeout   = errors.New("provider_timeout")
 	ErrProviderRateLimit = errors.New("provider_rate_limit")
+	ErrProviderAuth      = errors.New("provider_auth_error")
 	ErrProvider5xx       = errors.New("provider_5xx")
+	ErrProviderBadReq    = errors.New("provider_bad_request")
+	ErrModelUnavailable  = errors.New("model_unavailable")
 	ErrProviderBadResp   = errors.New("provider_bad_response")
+	ErrStreamInterrupted = errors.New("stream_interrupted")
 )
