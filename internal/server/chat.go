@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/magnusfroste/tokenix/internal/openai"
-	"github.com/magnusfroste/tokenix/internal/provider"
+	"github.com/magnusfroste/tokenizer/internal/openai"
+	"github.com/magnusfroste/tokenizer/internal/provider"
 )
 
 func ChatCompletionsHandler(p provider.Adapter) http.HandlerFunc {

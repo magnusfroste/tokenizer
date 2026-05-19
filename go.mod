@@ -1,4 +1,4 @@
-module github.com/magnusfroste/tokenix
+module github.com/magnusfroste/tokenizer
 
 go 1.22.2
 

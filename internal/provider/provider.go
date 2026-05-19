@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/magnusfroste/tokenix/internal/openai"
+	"github.com/magnusfroste/tokenizer/internal/openai"
 )
 
 type Adapter interface {

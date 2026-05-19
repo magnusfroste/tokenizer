@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/magnusfroste/tokenix/internal/openai"
+	"github.com/magnusfroste/tokenizer/internal/openai"
 )
 
 // MockAdapter is a thin HTTP client against the mock-provider binary. It is

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Tokenix is an OpenAI-compatible model router / gateway written in **Go**. It sits between clients and LLM providers, classifying each prompt and routing it to the right model based on task type, risk, cost, latency, and tenant policy — without using an LLM for routing decisions.
+Tokenizer is an OpenAI-compatible model router / gateway written in **Go**. It sits between clients and LLM providers, classifying each prompt and routing it to the right model based on task type, risk, cost, latency, and tenant policy — without using an LLM for routing decisions.
 
 The design target is routing overhead p95 < 100 ms before any provider call.
 

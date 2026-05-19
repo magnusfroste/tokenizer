@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/magnusfroste/tokenix/internal/openai"
-	"github.com/magnusfroste/tokenix/internal/tenant"
+	"github.com/magnusfroste/tokenizer/internal/openai"
+	"github.com/magnusfroste/tokenizer/internal/tenant"
 )
 
 func newStore(t *testing.T) (*InMemoryKeyStore, *tenant.Tenant) {

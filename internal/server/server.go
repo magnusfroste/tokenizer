@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/magnusfroste/tokenix/internal/auth"
-	"github.com/magnusfroste/tokenix/internal/middleware"
-	"github.com/magnusfroste/tokenix/internal/provider"
+	"github.com/magnusfroste/tokenizer/internal/auth"
+	"github.com/magnusfroste/tokenizer/internal/middleware"
+	"github.com/magnusfroste/tokenizer/internal/provider"
 )
 
 type Config struct {

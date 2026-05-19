@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/magnusfroste/tokenix/internal/openai"
-	"github.com/magnusfroste/tokenix/internal/provider"
+	"github.com/magnusfroste/tokenizer/internal/openai"
+	"github.com/magnusfroste/tokenizer/internal/provider"
 )
 
 type fakeAdapter struct {

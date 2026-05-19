@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/magnusfroste/tokenix/internal/openai"
-	"github.com/magnusfroste/tokenix/internal/tenant"
+	"github.com/magnusfroste/tokenizer/internal/openai"
+	"github.com/magnusfroste/tokenizer/internal/tenant"
 )
 
 type KeyStore interface {

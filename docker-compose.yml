@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: tokenix
-      POSTGRES_PASSWORD: tokenix
-      POSTGRES_DB: tokenix
+      POSTGRES_USER: tokenizer
+      POSTGRES_PASSWORD: tokenizer
+      POSTGRES_DB: tokenizer
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tokenix"]
+      test: ["CMD-SHELL", "pg_isready -U tokenizer"]
       interval: 2s
       timeout: 2s
       retries: 20
