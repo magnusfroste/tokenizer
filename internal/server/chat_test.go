@@ -14,9 +14,11 @@ import (
 	"testing"
 
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
+	"github.com/magnusfroste/tokenizer/internal/middleware"
 	"github.com/magnusfroste/tokenizer/internal/openai"
 	"github.com/magnusfroste/tokenizer/internal/provider"
 	"github.com/magnusfroste/tokenizer/internal/router"
+	"github.com/magnusfroste/tokenizer/internal/tenant"
 )
 
 type fakeAdapter struct {
@@ -93,6 +95,7 @@ func TestChat_HappyPath(t *testing.T) {
 
 type chatTestProcessor struct {
 	result contextproc.Result
+	job    *router.JobDescriptor
 	called bool
 }
 
@@ -100,6 +103,7 @@ func (p *chatTestProcessor) Name() string { return "chat-test" }
 
 func (p *chatTestProcessor) Process(ctx context.Context, req *provider.NormalizedModelRequest, job *router.JobDescriptor) (contextproc.Result, error) {
 	p.called = true
+	p.job = job
 	return p.result, nil
 }
 
@@ -137,6 +141,69 @@ func TestChat_ContextPipelineWritesSavingsHeader(t *testing.T) {
 	}
 	if got := rec.Header().Get("X-Router-Context-Savings"); got != "12" {
 		t.Fatalf("expected context savings header, got %q", got)
+	}
+}
+
+func TestChat_ContextPipelineReceivesRouterJobDescriptor(t *testing.T) {
+	processor := &chatTestProcessor{result: contextproc.Result{TokensSaved: 0}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	base := ChatCompletionsHandler(&fakeAdapter{resp: testChatResponse()}, ChatOptions{
+		ContextPipelineEnabled: true,
+		ContextPipeline: &contextproc.Pipeline{
+			Processors: []contextproc.Processor{processor},
+			Logger:     logger,
+		},
+		Logger: logger,
+	})
+	h := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := tenant.WithTenant(r.Context(), &tenant.Tenant{ID: "tn_auth", Project: "prj_auth"})
+		base.ServeHTTP(w, r.WithContext(ctx))
+	}))
+
+	body := openai.ChatRequest{
+		Model: "explicit-model",
+		Messages: []openai.Message{
+			{Role: "user", Content: "Fix auth payment handling in src/auth/session.ts"},
+		},
+		Metadata: map[string]any{
+			"tenant_id":          "tn_untrusted",
+			"project_id":         "prj_untrusted",
+			"latency_preference": "fast",
+			"risk_level":         "low",
+		},
+	}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(buf))
+	req.Header.Set("X-Router-Request-Id", "req_chat_descriptor")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if processor.job == nil {
+		t.Fatal("expected processor to receive job descriptor")
+	}
+	if processor.job.RequestID != "req_chat_descriptor" {
+		t.Fatalf("expected request id from middleware, got %q", processor.job.RequestID)
+	}
+	if processor.job.TenantID != "tn_auth" || processor.job.ProjectID != "prj_auth" {
+		t.Fatalf("expected authenticated tenant context, got tenant=%q project=%q", processor.job.TenantID, processor.job.ProjectID)
+	}
+	if processor.job.TenantIDHint != "" || processor.job.ProjectIDHint != "" {
+		t.Fatalf("expected auth tenant to win over untrusted hints, got tenant_hint=%q project_hint=%q", processor.job.TenantIDHint, processor.job.ProjectIDHint)
+	}
+	if processor.job.RiskLevel != router.RiskHigh || processor.job.RiskLevelHint != router.RiskLow {
+		t.Fatalf("expected low risk as hint only, got risk=%q hint=%q", processor.job.RiskLevel, processor.job.RiskLevelHint)
+	}
+	if processor.job.LatencyPreference != router.LatencyFast {
+		t.Fatalf("expected latency hint fast, got %q", processor.job.LatencyPreference)
+	}
+	if processor.job.ExplicitModel == nil || *processor.job.ExplicitModel != "explicit-model" {
+		t.Fatalf("expected explicit model, got %#v", processor.job.ExplicitModel)
 	}
 }
 

@@ -21,8 +21,6 @@ const chatCompletionsPath = "/v1/chat/completions"
 
 // OpenAIAdapter calls an OpenAI-compatible chat completions endpoint. It
 // expects req.Model to already contain the provider model id selected upstream.
-// response_format mapping is deferred until the shared OpenAI request shape
-// exposes that field.
 type OpenAIAdapter struct {
 	BaseURL string
 	APIKey  string

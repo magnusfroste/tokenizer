@@ -6,7 +6,7 @@
 - `type: test`
 - `sprint: 03`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Intent
 

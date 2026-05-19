@@ -49,7 +49,18 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 				pipelineCopy.Logger = cfg.Logger
 				pipeline = &pipelineCopy
 			}
-			result := pipeline.Run(r.Context(), normalized, jobDescriptorForRequest(r, &req))
+			var auth router.AuthTenantContext
+			if t, ok := tenant.FromContext(r.Context()); ok {
+				auth.TenantID = t.ID
+				auth.ProjectID = t.Project
+			}
+			job := router.NewJobDescriptor(router.JobDescriptorInput{
+				RequestID: middleware.RequestIDFromContext(r.Context()),
+				Auth:      auth,
+				Headers:   r.Header,
+				Request:   &req,
+			})
+			result := pipeline.Run(r.Context(), normalized, job)
 			if result.TotalTokensSaved > 0 {
 				w.Header().Set("X-Router-Context-Savings", strconv.Itoa(result.TotalTokensSaved))
 			}
@@ -174,26 +185,6 @@ func logStreamResult(r *http.Request, logger *slog.Logger, p provider.Adapter, n
 		return
 	}
 	logger.InfoContext(r.Context(), "chat_stream_completed", attrs...)
-}
-
-func jobDescriptorForRequest(r *http.Request, req *openai.ChatRequest) *router.JobDescriptor {
-	job := &router.JobDescriptor{
-		RequestID:       middleware.RequestIDFromContext(r.Context()),
-		TaskType:        "unknown",
-		RiskLevel:       "unknown",
-		RouterMode:      req.Model,
-		Metadata:        req.Metadata,
-		RequiresToolUse: len(req.Tools) > 0,
-	}
-	if t, ok := tenant.FromContext(r.Context()); ok {
-		job.TenantID = t.ID
-		job.ProjectID = t.Project
-	}
-	if req.Model != "" && req.Model != "auto" {
-		model := req.Model
-		job.ExplicitModel = &model
-	}
-	return job
 }
 
 func logContextPipeline(r *http.Request, logger *slog.Logger, result contextproc.PipelineResult) {

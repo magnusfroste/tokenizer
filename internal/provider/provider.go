@@ -27,13 +27,15 @@ type StreamChunk struct {
 // NormalizedModelRequest is the provider-neutral request shape used between
 // routing/policy/context processing and concrete provider adapters.
 type NormalizedModelRequest struct {
-	Model       string
-	Messages    []openai.Message
-	Temperature *float64
-	MaxTokens   *int
-	Stream      bool
-	Tools       []any
-	Metadata    map[string]any
+	Model               string
+	Messages            []openai.Message
+	Temperature         *float64
+	MaxTokens           *int
+	MaxCompletionTokens *int
+	Stream              bool
+	Tools               []any
+	ResponseFormat      any
+	Metadata            map[string]any
 }
 
 func NormalizeChatRequest(req *openai.ChatRequest) *NormalizedModelRequest {
@@ -41,13 +43,15 @@ func NormalizeChatRequest(req *openai.ChatRequest) *NormalizedModelRequest {
 		return &NormalizedModelRequest{}
 	}
 	return &NormalizedModelRequest{
-		Model:       req.Model,
-		Messages:    append([]openai.Message(nil), req.Messages...),
-		Temperature: cloneFloat64Ptr(req.Temperature),
-		MaxTokens:   cloneIntPtr(req.MaxTokens),
-		Stream:      req.Stream,
-		Tools:       cloneAnySlice(req.Tools),
-		Metadata:    cloneMetadata(req.Metadata),
+		Model:               req.Model,
+		Messages:            append([]openai.Message(nil), req.Messages...),
+		Temperature:         cloneFloat64Ptr(req.Temperature),
+		MaxTokens:           cloneIntPtr(req.MaxTokens),
+		MaxCompletionTokens: cloneIntPtr(req.MaxCompletionTokens),
+		Stream:              req.Stream,
+		Tools:               cloneAnySlice(req.Tools),
+		ResponseFormat:      cloneAny(req.ResponseFormat),
+		Metadata:            cloneMetadata(req.Metadata),
 	}
 }
 
@@ -56,13 +60,15 @@ func (r *NormalizedModelRequest) ToOpenAI() *openai.ChatRequest {
 		return &openai.ChatRequest{}
 	}
 	return &openai.ChatRequest{
-		Model:       r.Model,
-		Messages:    append([]openai.Message(nil), r.Messages...),
-		Temperature: cloneFloat64Ptr(r.Temperature),
-		MaxTokens:   cloneIntPtr(r.MaxTokens),
-		Stream:      r.Stream,
-		Tools:       cloneAnySlice(r.Tools),
-		Metadata:    cloneMetadata(r.Metadata),
+		Model:               r.Model,
+		Messages:            append([]openai.Message(nil), r.Messages...),
+		Temperature:         cloneFloat64Ptr(r.Temperature),
+		MaxTokens:           cloneIntPtr(r.MaxTokens),
+		MaxCompletionTokens: cloneIntPtr(r.MaxCompletionTokens),
+		Stream:              r.Stream,
+		Tools:               cloneAnySlice(r.Tools),
+		ResponseFormat:      cloneAny(r.ResponseFormat),
+		Metadata:            cloneMetadata(r.Metadata),
 	}
 }
 
@@ -71,13 +77,15 @@ func (r *NormalizedModelRequest) Clone() *NormalizedModelRequest {
 		return &NormalizedModelRequest{}
 	}
 	return &NormalizedModelRequest{
-		Model:       r.Model,
-		Messages:    append([]openai.Message(nil), r.Messages...),
-		Temperature: cloneFloat64Ptr(r.Temperature),
-		MaxTokens:   cloneIntPtr(r.MaxTokens),
-		Stream:      r.Stream,
-		Tools:       cloneAnySlice(r.Tools),
-		Metadata:    cloneMetadata(r.Metadata),
+		Model:               r.Model,
+		Messages:            append([]openai.Message(nil), r.Messages...),
+		Temperature:         cloneFloat64Ptr(r.Temperature),
+		MaxTokens:           cloneIntPtr(r.MaxTokens),
+		MaxCompletionTokens: cloneIntPtr(r.MaxCompletionTokens),
+		Stream:              r.Stream,
+		Tools:               cloneAnySlice(r.Tools),
+		ResponseFormat:      cloneAny(r.ResponseFormat),
+		Metadata:            cloneMetadata(r.Metadata),
 	}
 }
 
