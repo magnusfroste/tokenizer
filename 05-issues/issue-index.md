@@ -19,7 +19,7 @@ P2:
 ## Tillagda via triage (post-sprint-1)
 
 - ISSUE-061 — Rebrand `tokenix` → `tokenizer` (module path + product name). `type: refactor`, klar 2026-05-19.
-- ISSUE-062 — Context-processor pipeline (interface only). `type: design`, `ready-for-human`. Designval kvar att landa.
+- ISSUE-062 — Context-processor pipeline (interface only). `type: design`, `ready-for-agent`. Designval landade i ADR-0013.
 
 ## Labelstandard
 

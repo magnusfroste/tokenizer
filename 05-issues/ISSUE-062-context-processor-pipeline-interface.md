@@ -6,74 +6,90 @@
 
 - `type: design`
 - `priority: P2`
-- `state: ready-for-human`
-- `epic: EPIC-?` (TBD — möjligen ny EPIC "context optimization")
+- `state: ready-for-agent`
+- `adr: ADR-0013`
 
 ## Mål
 
-Definiera ett pluggbart `ContextProcessor`-interface som körs mellan policy-engine och provider-adapter, så att framtida context-trimning (RTK-liknande filtrering, dedup, summarization, redaction) kan adderas utan att routing-koden behöver röras. **Ingen processor implementeras i detta issue** — bara interfacet, en no-op default-pipeline, och hooks i request-livscykeln.
+Implementera ett pluggbart `ContextProcessor`-interface och en no-op-pipeline mellan policy-engine och provider-adapter, så att framtida context-trimning kan adderas utan att routing-koden behöver röras. **Ingen riktig processor implementeras i detta issue** — bara interfacet, no-op default-pipelinen, hooks i request-livscykeln, och feature-flagga.
 
 ## Bakgrund
 
-Diskussion 2026-05-19: modellval är största ROI-hävstången (Opus→Haiku kan ge 96% per-turn-besparing), men context är den största absoluta token-volymen i agent-flöden (10k–100k+ per request). RTK (`github.com/rtk-ai/rtk`) visar att 60–90% reduktion på kommando-output är realistiskt.
+Diskussion 2026-05-19: modellval är största ROI-hävstången, context är största absoluta token-volymen i agent-flöden. RTK (`github.com/rtk-ai/rtk`) visar att 60–90% reduktion på kommando-output är realistiskt. Strategin är att leverera modellval-routing först (lägre förtroendetröskel) och förbereda för context-trimning som kan komponeras multiplikativt ovanpå.
 
-Strategiskt val: tokenizer fokuserar modellval först (lägre förtroendetröskel — klienten ser samma in/ut, bara billigare). Context-trimning kräver att routern modifierar klientens input → mycket högre förtroende. Men de **komponerar multiplikativt**: 60% routad till billigare + 40% context-trim på resten ≈ 70% total kostnadsreduktion.
+Designvalen är landade i **[ADR-0013](../02-adr/ADR-0013-context-processor-pipeline-mellan-policy-och-adapter.md)**.
 
-Issue:n bygger förvarningen för det andra steget utan att låsa scope.
+## Låsta designval (från ADR-0013)
 
-## Designfrågor som måste besvaras (därför ready-for-human)
+1. **Position:** efter policy, före adapter-translation. Arbetar på `NormalizedModelRequest`.
+2. **Åtkomst:** muterbar `*NormalizedModelRequest`, read-only `*JobDescriptor`.
+3. **Ingen escalering tillbaka till routing.** Straight-line, fail-open.
+4. **Latensbudget:** pipeline total 20 ms hård cap; per-processor 10 ms soft / 15 ms hård. Timeout → skippa processor, fortsätt opåverkad.
+5. **Opt-in:** per-tenant via policy YAML. Inte via header.
+6. **Observability:** response-header `X-Router-Context-Savings: <tokens>` + event-log `context_processors_applied: [{name, tokens_saved}]`.
+7. **Default off.** Feature-flagg `ROUTER_CONTEXT_PIPELINE_ENABLED` + per-tenant policy.
 
-1. **Var i pipelinen?** Efter policy, före provider-adapter? Eller efter adapter-translation (har provider-specifikt format)?
-2. **Vad ser processorn?** Hela `NormalizedModelRequest` (mut/ro)? Bara `messages`? Får den läsa `JobDescriptor`?
-3. **Kan den blockera/escalera?** Returnera "för riskabelt att trimma, route up" som signal till routing-engine? Det skapar en loop — sannolikt nej i v1.
-4. **Latensbudget per processor?** Hela fast-path är p95 < 100 ms. En processor som dedupar 50k tokens får inte spränga budgeten. Hård timeout per processor + fail-open?
-5. **Opt-in granularitet?** Per-tenant via policy? Per-request via header (`X-Router-Context-Processors: rtk-trim,redact-pii`)? Per-task_type?
-6. **Observability:** Hur exponerar vi att en processor trimmat X tokens? Response-header (`x-router-context-savings: 4231`)? Event-log fält?
-7. **Klient-förtroende:** Default off? Default on med klient-opt-out? Förmodligen default off i v1 så vi kan rulla ut utan att överraska någon.
-
-## Föreslaget skiss-interface
+## Interface
 
 ```go
-type ContextProcessor interface {
+// internal/contextproc/processor.go
+package contextproc
+
+type Processor interface {
     Name() string
-    Process(ctx context.Context, req *NormalizedModelRequest, job *JobDescriptor) (ProcessResult, error)
+    Process(ctx context.Context, req *provider.NormalizedModelRequest, job *router.JobDescriptor) (Result, error)
 }
 
-type ProcessResult struct {
+type Result struct {
     TokensSaved   int
     AppliedRules  []string
     SkippedReason string // tom om processor körde
 }
 ```
 
-Pipeline: ordnad lista, varje processor får mutera `req.Messages` in-place. Fail-open: om en processor returnerar error eller överskrider sin timeout, logga och fortsätt med opåverkad request. **Inget context-processor-resultat får påverka redan-fattat route-beslut.**
+```go
+// internal/contextproc/pipeline.go
+type Pipeline struct {
+    Processors        []Processor
+    TotalTimeout      time.Duration // 20 ms hård cap
+    PerProcessorSoft  time.Duration // 10 ms
+    PerProcessorHard  time.Duration // 15 ms
+}
+
+func (p *Pipeline) Run(ctx context.Context, req *provider.NormalizedModelRequest, job *router.JobDescriptor) PipelineResult
+```
+
+`PipelineResult` ackumulerar `TokensSaved` och `Applied []AppliedEntry{Name, TokensSaved}` för observability-utskrift.
 
 ## Acceptanskriterier
 
-- `internal/contextproc/` paket skapat med `ContextProcessor`-interfacet ovan (eller annan signatur Magnus landar på).
-- Pipeline-runner i `internal/contextproc/pipeline.go` som tar en `[]ContextProcessor` och kör dem sekventiellt med per-processor timeout och fail-open-semantik.
-- Default-pipeline är tom (no-op). Inget beteendeändras för existerande tester.
-- Hook i `internal/server/chat.go` (eller var det landar) som kör pipelinen mellan policy-resultat och provider-call. Bakom feature-flagg `ROUTER_CONTEXT_PIPELINE_ENABLED` (default false).
-- Response-header `X-Router-Context-Savings` läggs till om pipelinen körde och `TokensSaved > 0` ackumulerades.
-- En "no-op processor" som dummy + test som verifierar att pipelinen kör den och rapporterar 0 saved tokens.
-- ADR skriven i `02-adr/` som motiverar interfacet och svarar på designfråga 1–7 ovan.
-- Inga befintliga p95-tester regressar (`make test` grön).
+- `internal/contextproc/` paket med `Processor`-interfacet och `Pipeline`-runner enligt skissen.
+- Pipeline-runner kör processors sekventiellt, respekterar per-processor timeouts (soft = ctx-deadline, hard = goroutine + select med kill), och total pipeline-timeout. Fail-open vid error/timeout — logga via `slog`, fortsätt med opåverkad request.
+- Default-pipeline är tom (no-op). Inga befintliga tester regressar.
+- Hook i `internal/server/chat.go` mellan policy-resultat och provider-call, bakom feature-flagg `ROUTER_CONTEXT_PIPELINE_ENABLED` (default false). Streaming-requests skippar pipelinen (explicit guard).
+- Response-header `X-Router-Context-Savings: <tokens>` skrivs om `PipelineResult.TotalTokensSaved > 0`.
+- Event-log fält `context_processors_applied` populeras med per-processor namn + savings.
+- Test: `NoopProcessor` som returnerar `Result{TokensSaved: 0}`. Test verifierar att pipelinen kör den, ackumulerar 0, inga headers skrivs.
+- Test: en `SlowProcessor` som sleepar > hard-timeout. Test verifierar att pipelinen avbryter den, loggar, fortsätter, request opåverkad.
+- Test: pipeline med två processors, en panicar — test verifierar att fail-open håller (panic recovered, andra processorn körs).
+- `go build ./...`, `go vet ./...`, `go test ./...` alla gröna.
 
 ## Inte i scope
 
-- Faktisk RTK-integration eller någon icke-trivial processor (PII-redaction, dedup, summarization). Egna issues senare.
-- Per-tenant policy-config för vilka processors som körs. Lämna åt EPIC kring policy v2.
-- Streaming-stöd för processors. v1: bara non-streaming requests. Lägg in en explicit check som hoppar över pipelinen vid streaming = true.
+- Faktiska processors (RTK, dedup, redact, summarize) — egna issues senare.
+- Per-tenant policy-schema för att slå på pipelinen — räcker med feature-flagga + hard-coded "on om flagga satt" i v1. Policy-integration är ett senare issue.
+- Streaming-stöd. v1 skippar streaming med explicit check.
+- Re-estimering av `prompt_tokens_estimate` efter trimning — eftersom v1 bara har no-op processor finns inget att re-estimera. Lägg in TODO-kommentar i hook där re-estimering ska in.
 
 ## Tekniska noter
 
-- Fast-path latency budget (p95 < 100 ms) är heligt. Pipelinen MÅSTE ha en total timeout (förslag: 20 ms) som gör att den hellre hoppar över processing än spränger budgeten.
-- Pipelinen kör efter policy → har tillgång till `JobDescriptor`. Använd det: en processor kan välja att inte trimma `security_review`-tasks t.ex.
-- Tänk på `prompt_tokens_estimate` — om en processor faktiskt trimmar context, måste downstream-estimeringar i adaptern uppdateras eller bli ogiltiga?
+- p95 < 100 ms är heligt (ADR-0004). Pipelinen MÅSTE ha total-timeout som hellre hoppar över processing än spränger budget.
+- Per-processor hard timeout kräver goroutine + cancel-kanal eftersom en CPU-bound processor inte respekterar `ctx.Done()`. Soft timeout via ctx räcker för IO-bound, hard timeout krävs för säkerhet.
+- Använd `slog` strukturerat: `slog.Info("context_processor", "name", p.Name(), "saved", r.TokensSaved, "skipped", r.SkippedReason)`.
+- Recover() i pipeline-runner per processor — en panicande processor får inte ta ner request.
 
 ## Klar när
 
-- Interface, no-op-pipeline, hook och feature-flagg är på plats.
-- ADR mergad i `02-adr/`.
-- Befintliga tester gröna; ny test för no-op-pipelinen passerar.
-- Issue stängd när första riktiga processor-issue (ISSUE-063+) kan referera till interfacet.
+- Interface, pipeline-runner, no-op-default, hook och feature-flagg är på plats.
+- Tester ovan passerar.
+- Issue stängd; framtida processor-issues (ISSUE-063+) kan referera till `internal/contextproc.Processor`.
