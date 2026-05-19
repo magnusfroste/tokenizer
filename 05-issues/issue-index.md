@@ -1,0 +1,33 @@
+# Issue index
+
+Issues är skrivna som implementerbara tickets. Filnamn följer `ISSUE-XXX-title.md`.
+
+## Rekommenderad prioritet
+
+P0:
+
+- ISSUE-001 till ISSUE-036.
+
+P1:
+
+- ISSUE-037 till ISSUE-056.
+
+P2:
+
+- ISSUE-057 och framåt.
+
+## Labelstandard
+
+- `epic: EPIC-XX`
+- `priority: P0|P1|P2`
+- `type: backend|frontend|infra|security|data|product|test`
+- `sprint: 00..08`
+
+## Arbetsflöde
+
+1. Skapa branch från issue.
+2. Implementera.
+3. Lägg till test.
+4. Uppdatera dokumentation om kontrakt ändras.
+5. Kontrollera latency om issue påverkar fast path.
+6. Merge efter review.
