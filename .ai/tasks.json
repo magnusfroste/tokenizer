@@ -108,65 +108,65 @@
       "id": "ISSUE-014",
       "title": "Skapa JobDescriptor datamodell",
       "source": "05-issues/ISSUE-014-skapa-jobdescriptor-datamodell.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-20T14:15:00+02:00"
     },
     {
       "id": "ISSUE-015",
       "title": "Implementera snabb tokenestimering",
       "source": "05-issues/ISSUE-015-implementera-snabb-tokenestimering.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-20T14:15:00+02:00"
     },
     {
       "id": "ISSUE-016",
       "title": "Implementera feature extraction för kodsignaler",
       "source": "05-issues/ISSUE-016-implementera-feature-extraction-f-r-kodsignaler.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-20T14:15:00+02:00"
     },
     {
       "id": "ISSUE-017",
       "title": "Implementera taskklassregler",
       "source": "05-issues/ISSUE-017-implementera-taskklassregler.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-20T14:15:00+02:00"
     },
     {
       "id": "ISSUE-018",
       "title": "Implementera riskklassregler",
       "source": "05-issues/ISSUE-018-implementera-riskklassregler.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-20T14:15:00+02:00"
     },
     {
       "id": "ISSUE-019",
       "title": "Mät feature extraction latency",
       "source": "05-issues/ISSUE-019-m-t-feature-extraction-latency.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-20T14:15:00+02:00"
     },
     {
       "id": "ISSUE-020",
       "title": "Definiera policy DSL v1",
       "source": "05-issues/ISSUE-020-definiera-policy-dsl-v1.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-20T14:30:00+02:00"
     },
     {
       "id": "ISSUE-021",
       "title": "Implementera policy parser och validering",
       "source": "05-issues/ISSUE-021-implementera-policy-parser-och-validering.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-20T14:55:00+02:00"
     },
     {
       "id": "ISSUE-022",
