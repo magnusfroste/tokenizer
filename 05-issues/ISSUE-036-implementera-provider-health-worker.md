@@ -1,11 +1,12 @@
 # ISSUE-036: Implementera provider health worker
 
 ## Labels
-
 - `epic: EPIC-07`
 - `priority: P0`
 - `type: backend`
 - `sprint: 06`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

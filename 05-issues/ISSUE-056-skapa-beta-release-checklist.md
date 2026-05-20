@@ -1,11 +1,12 @@
 # ISSUE-056: Skapa beta release checklist
 
 ## Labels
-
 - `epic: EPIC-09`
 - `priority: P1`
 - `type: product`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

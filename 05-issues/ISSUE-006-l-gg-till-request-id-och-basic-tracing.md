@@ -1,11 +1,12 @@
 # ISSUE-006: Lägg till request id och basic tracing
 
 ## Labels
-
 - `epic: EPIC-07`
 - `priority: P0`
 - `type: backend`
 - `sprint: 01`
+- `category: enhancement`
+- `state: done`
 
 ## Mål
 

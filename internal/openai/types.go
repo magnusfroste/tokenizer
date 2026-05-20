@@ -3,13 +3,15 @@
 package openai
 
 type ChatRequest struct {
-	Model       string         `json:"model"`
-	Messages    []Message      `json:"messages"`
-	Temperature *float64       `json:"temperature,omitempty"`
-	MaxTokens   *int           `json:"max_tokens,omitempty"`
-	Stream      bool           `json:"stream,omitempty"`
-	Tools       []any          `json:"tools,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
+	Model               string         `json:"model"`
+	Messages            []Message      `json:"messages"`
+	Temperature         *float64       `json:"temperature,omitempty"`
+	MaxTokens           *int           `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int           `json:"max_completion_tokens,omitempty"`
+	Stream              bool           `json:"stream,omitempty"`
+	Tools               []any          `json:"tools,omitempty"`
+	ResponseFormat      any            `json:"response_format,omitempty"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
 }
 
 type Message struct {

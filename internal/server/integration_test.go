@@ -105,7 +105,7 @@ func TestSprint1_EndToEnd(t *testing.T) {
 type panicAdapter struct{}
 
 func (panicAdapter) Name() string { return "panic" }
-func (panicAdapter) Complete(_ context.Context, _ *openai.ChatRequest) (*openai.ChatResponse, error) {
+func (panicAdapter) Complete(_ context.Context, _ *provider.NormalizedModelRequest) (*openai.ChatResponse, error) {
 	panic("provider must not be called when request is rejected upstream")
 }
 

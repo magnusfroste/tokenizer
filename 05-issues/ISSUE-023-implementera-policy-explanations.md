@@ -1,11 +1,12 @@
 # ISSUE-023: Implementera policy explanations
 
 ## Labels
-
 - `epic: EPIC-04`
 - `priority: P0`
 - `type: backend`
 - `sprint: 04`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

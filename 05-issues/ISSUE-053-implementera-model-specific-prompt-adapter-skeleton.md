@@ -1,11 +1,12 @@
 # ISSUE-053: Implementera model-specific prompt adapter skeleton
 
 ## Labels
-
 - `epic: EPIC-06`
 - `priority: P2`
 - `type: backend`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

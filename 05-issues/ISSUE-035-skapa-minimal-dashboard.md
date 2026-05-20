@@ -1,11 +1,12 @@
 # ISSUE-035: Skapa minimal dashboard
 
 ## Labels
-
 - `epic: EPIC-07`
 - `priority: P0`
 - `type: frontend`
 - `sprint: 06`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

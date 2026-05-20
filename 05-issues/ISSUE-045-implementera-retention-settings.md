@@ -1,11 +1,12 @@
 # ISSUE-045: Implementera retention settings
 
 ## Labels
-
 - `epic: EPIC-09`
 - `priority: P1`
 - `type: data`
 - `sprint: 08`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

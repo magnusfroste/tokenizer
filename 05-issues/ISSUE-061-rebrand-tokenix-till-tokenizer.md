@@ -3,11 +3,11 @@
 # ISSUE-061: Rebrand Tokenix → Tokenizer
 
 ## Labels
-
 - `type: refactor`
 - `priority: P1`
-- `state: ready-for-agent`
+- `state: done`
 - `sprint: 02`
+- `category: enhancement`
 
 ## Mål
 

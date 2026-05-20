@@ -130,3 +130,17 @@ Start at `01-architecture/01-system-overview.md` for any new subsystem. Each ISS
 - Client metadata is not trusted — policy can override or escalate risk signals.
 - Streaming fallback is only allowed before first token; after first token, restart requires explicit client opt-in.
 - Policy and registry can be reloaded without a code deployment.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked as local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+This repo uses the default five-state triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repo uses a repo-specific single-context layout based on README, product docs, architecture docs, ADRs in `02-adr/`, and engineering references. See `docs/agents/domain.md`.

@@ -1,11 +1,12 @@
 # ISSUE-038: Implementera eval runner
 
 ## Labels
-
 - `epic: EPIC-08`
 - `priority: P1`
 - `type: backend`
 - `sprint: 07`
+- `category: enhancement`
+- `state: ready-for-agent`
 
 ## Mål
 

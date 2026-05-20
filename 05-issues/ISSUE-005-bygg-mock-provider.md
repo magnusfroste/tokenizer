@@ -1,11 +1,12 @@
 # ISSUE-005: Bygg mock provider
 
 ## Labels
-
 - `epic: EPIC-06`
 - `priority: P0`
 - `type: test`
 - `sprint: 01`
+- `category: enhancement`
+- `state: done`
 
 ## Mål
 

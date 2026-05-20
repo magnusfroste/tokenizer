@@ -1,6 +1,8 @@
-.PHONY: build dev test test-unit test-integration lint fmt vet tidy clean run run-mock
+.PHONY: build dev test test-unit test-integration lint fmt vet tidy clean run run-mock migrate seed
 
 GO ?= go
+PSQL ?= psql
+DATABASE_URL ?= postgres://tokenizer:tokenizer@localhost:5432/tokenizer?sslmode=disable
 BIN_DIR := bin
 ROUTER_BIN := $(BIN_DIR)/router
 MOCK_BIN := $(BIN_DIR)/mock-provider
@@ -19,6 +21,12 @@ run-mock: build
 
 dev:
 	$(GO) run ./cmd/router
+
+migrate:
+	$(PSQL) "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f db/migrations/001_foundation.sql
+
+seed:
+	$(PSQL) "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f db/seeds/local.sql
 
 test:
 	$(GO) test ./... -race -count=1

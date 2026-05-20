@@ -43,9 +43,10 @@ func main() {
 	}
 
 	handler := server.New(server.Config{
-		Logger:   logger,
-		KeyStore: keyStore,
-		Provider: mock,
+		Logger:                 logger,
+		KeyStore:               keyStore,
+		Provider:               mock,
+		ContextPipelineEnabled: parseBoolEnv(os.Getenv("ROUTER_CONTEXT_PIPELINE_ENABLED")),
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")
@@ -88,5 +89,14 @@ func parseLogLevel(s string) slog.Level {
 		return slog.LevelError
 	default:
 		return slog.LevelInfo
+	}
+}
+
+func parseBoolEnv(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
 	}
 }

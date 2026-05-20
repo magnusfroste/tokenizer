@@ -3,11 +3,11 @@
 # ISSUE-062: Context-processor pipeline (interface only)
 
 ## Labels
-
 - `type: design`
 - `priority: P2`
-- `state: ready-for-agent`
+- `state: done`
 - `adr: ADR-0013`
+- `category: enhancement`
 
 ## Mål
 
@@ -93,3 +93,14 @@ func (p *Pipeline) Run(ctx context.Context, req *provider.NormalizedModelRequest
 - Interface, pipeline-runner, no-op-default, hook och feature-flagg är på plats.
 - Tester ovan passerar.
 - Issue stängd; framtida processor-issues (ISSUE-063+) kan referera till `internal/contextproc.Processor`.
+
+## Closeout
+
+Completed 2026-05-19.
+
+- Added `internal/contextproc.Processor`, `Pipeline`, `PipelineResult`, and no-op default pipeline.
+- Added minimal `internal/router.JobDescriptor` and `provider.NormalizedModelRequest` contracts.
+- Wired non-streaming chat requests through the optional context pipeline behind `ROUTER_CONTEXT_PIPELINE_ENABLED`.
+- Added `X-Router-Context-Savings` only when processors report positive savings.
+- Added fail-open coverage for no-op, timeout, panic, and error processors.
+- Verified with `go test ./...`, `go vet ./...`, `go build ./...`, and `make test`.
