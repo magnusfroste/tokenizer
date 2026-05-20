@@ -1,5 +1,12 @@
 # Policy engine
 
+> **DSL-kontrakt:** Schemat för policy (top-level-fält, `when`, `route`, prioritet,
+> vokabulär och default-policy) definieras av Policy DSL v1 i
+> [`06-engineering/01-routing-policy-reference.md`](../06-engineering/01-routing-policy-reference.md).
+> Detta dokument beskriver engine-arkitekturen; exemplen nedan använder
+> `tier`-hints som DSL v1 mappar till `force`/`constraints`/`defaults` med
+> `model_profile`-vokabulär.
+
 ## Syfte
 
 Policy engine avgör vilka rutter som är tillåtna eller tvingade. Den ska vara snabb, förklarbar och versionerad.
