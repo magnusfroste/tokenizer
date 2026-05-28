@@ -1,8 +1,8 @@
 {
   "repo": "tokenizer",
   "branch": "main",
-  "next": "ISSUE-023",
+  "next": "ISSUE-025",
   "in_progress": null,
-  "updated_at": "2026-05-28T15:21:17+02:00",
-  "last_completed": "ISSUE-022"
+  "updated_at": "2026-05-28T18:14:13+02:00",
+  "last_completed": "ISSUE-024"
 }

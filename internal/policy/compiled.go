@@ -3,6 +3,7 @@ package policy
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -48,6 +49,7 @@ type EvaluationInput struct {
 type Evaluation struct {
 	PolicyVersion  string
 	MatchedRuleIDs []string
+	Explanations   []string
 	Route          Route
 	Blocked        bool
 }
@@ -62,9 +64,10 @@ type CompiledPolicy struct {
 }
 
 type compiledRule struct {
-	id      string
-	matcher compiledMatcher
-	route   Route
+	id          string
+	description string
+	matcher     compiledMatcher
+	route       Route
 }
 
 type compiledMatcher struct {
@@ -105,9 +108,10 @@ func Compile(p *Policy, snapshot *registry.Snapshot) (*CompiledPolicy, error) {
 		route := cloneRoute(rule.Route)
 		normalizeRouteHints(&route)
 		compiled.rules = append(compiled.rules, compiledRule{
-			id:      rule.ID,
-			matcher: matcher,
-			route:   route,
+			id:          rule.ID,
+			description: rule.Description,
+			matcher:     matcher,
+			route:       route,
 		})
 	}
 	return compiled, nil
@@ -152,11 +156,41 @@ func (p *CompiledPolicy) Evaluate(input EvaluationInput) Evaluation {
 			continue
 		}
 		out.MatchedRuleIDs = append(out.MatchedRuleIDs, rule.id)
-		mergeRoute(&out.Route, rule.route)
+		out.Explanations = append(out.Explanations, rule.explanations()...)
+		out.Explanations = append(out.Explanations, mergeRoute(&out.Route, rule.route, rule.id)...)
 		if rule.route.Block != nil {
 			out.Blocked = true
 			break
 		}
+	}
+	return out
+}
+
+func (e Evaluation) LogFields() []any {
+	return []any{
+		"policy_version", e.PolicyVersion,
+		"policy_matched_rules", append([]string(nil), e.MatchedRuleIDs...),
+		"policy_explanations", append([]string(nil), e.Explanations...),
+		"policy_blocked", e.Blocked,
+	}
+}
+
+func ExplainEnabled(headers http.Header) bool {
+	switch strings.ToLower(strings.TrimSpace(headers.Get("X-Router-Explain"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func (r compiledRule) explanations() []string {
+	out := []string{fmt.Sprintf("Policy rule %s matched", r.id)}
+	if r.description != "" {
+		out = append(out, fmt.Sprintf("Rule %s description: %s", r.id, r.description))
+	}
+	if r.route.Reason != "" {
+		out = append(out, fmt.Sprintf("Rule %s reason: %s", r.id, r.route.Reason))
 	}
 	return out
 }
@@ -379,12 +413,15 @@ func compileGlob(pattern string) (*regexp.Regexp, error) {
 	return regexp.Compile(b.String())
 }
 
-func mergeRoute(dst *Route, src Route) {
+func mergeRoute(dst *Route, src Route, ruleID string) []string {
+	var explanations []string
 	if src.Block != nil {
 		dst.Block = cloneBlock(src.Block)
 	}
 	if src.Force != nil {
-		dst.Force = cloneForce(src.Force)
+		var forceExplanations []string
+		dst.Force, forceExplanations = mergeForce(dst.Force, src.Force, ruleID)
+		explanations = append(explanations, forceExplanations...)
 	}
 	if src.Constraints != nil {
 		dst.Constraints = mergeConstraints(dst.Constraints, src.Constraints)
@@ -396,6 +433,68 @@ func mergeRoute(dst *Route, src Route) {
 		dst.Reason = src.Reason
 	}
 	dst.Hints = mergeHints(dst.Hints, src.Hints)
+	return explanations
+}
+
+func mergeForce(existing, next *Force, ruleID string) (*Force, []string) {
+	if existing == nil {
+		return cloneForce(next), nil
+	}
+	out := cloneForce(existing)
+	var explanations []string
+	keepFirst := func(field string) {
+		explanations = append(explanations, fmt.Sprintf("Rule %s force.%s ignored because an earlier matched rule already set it", ruleID, field))
+	}
+	if next.ModelProfile != "" {
+		if out.ModelProfile == "" {
+			out.ModelProfile = next.ModelProfile
+		} else {
+			keepFirst("model_profile")
+		}
+	}
+	if next.ModelProfileName != "" {
+		if out.ModelProfileName == "" {
+			out.ModelProfileName = next.ModelProfileName
+		} else {
+			keepFirst("model_profile_name")
+		}
+	}
+	if next.Provider != "" {
+		if out.Provider == "" {
+			out.Provider = next.Provider
+		} else {
+			keepFirst("provider")
+		}
+	}
+	if next.Model != "" {
+		if out.Model == "" {
+			out.Model = next.Model
+		} else {
+			keepFirst("model")
+		}
+	}
+	if next.Verifier != nil {
+		if out.Verifier == nil {
+			out.Verifier = cloneBoolPtr(next.Verifier)
+		} else {
+			keepFirst("verifier")
+		}
+	}
+	if next.TimeoutMS != nil {
+		if out.TimeoutMS == nil {
+			out.TimeoutMS = cloneIntPtr(next.TimeoutMS)
+		} else {
+			keepFirst("timeout_ms")
+		}
+	}
+	if next.Retention != "" {
+		if out.Retention == "" {
+			out.Retention = next.Retention
+		} else {
+			keepFirst("retention")
+		}
+	}
+	return out, explanations
 }
 
 func mergeConstraints(existing, next *Constraints) *Constraints {
@@ -545,31 +644,31 @@ func mergeDefaults(existing, next *Defaults) *Defaults {
 	if existing != nil {
 		*out = *cloneDefaults(existing)
 	}
-	if next.ModelProfile != "" {
+	if next.ModelProfile != "" && out.ModelProfile == "" {
 		out.ModelProfile = next.ModelProfile
 	}
-	if next.ModelProfileName != "" {
+	if next.ModelProfileName != "" && out.ModelProfileName == "" {
 		out.ModelProfileName = next.ModelProfileName
 	}
-	if next.Provider != "" {
+	if next.Provider != "" && out.Provider == "" {
 		out.Provider = next.Provider
 	}
-	if next.Model != "" {
+	if next.Model != "" && out.Model == "" {
 		out.Model = next.Model
 	}
-	if next.Verifier != nil {
+	if next.Verifier != nil && out.Verifier == nil {
 		out.Verifier = cloneBoolPtr(next.Verifier)
 	}
-	if next.TimeoutMS != nil {
+	if next.TimeoutMS != nil && out.TimeoutMS == nil {
 		out.TimeoutMS = cloneIntPtr(next.TimeoutMS)
 	}
-	if next.Retention != "" {
+	if next.Retention != "" && out.Retention == "" {
 		out.Retention = next.Retention
 	}
-	if next.MaxCostUSD != nil {
+	if next.MaxCostUSD != nil && out.MaxCostUSD == nil {
 		out.MaxCostUSD = cloneFloatPtr(next.MaxCostUSD)
 	}
-	if next.MaxLatencyMS != nil {
+	if next.MaxLatencyMS != nil && out.MaxLatencyMS == nil {
 		out.MaxLatencyMS = cloneIntPtr(next.MaxLatencyMS)
 	}
 	return out

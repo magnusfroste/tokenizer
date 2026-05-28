@@ -8,13 +8,13 @@ Klart enligt kod- och test-evidens:
 
 - ISSUE-001 till ISSUE-013.
 - ISSUE-014 till ISSUE-019 — Classifier foundation: JobDescriptor, tokenestimat, feature extraction, task/riskregler och latency guard.
-- ISSUE-020 till ISSUE-022 — Policy DSL v1, parser/validation och compiled policy cache.
+- ISSUE-020 till ISSUE-024 — Policy DSL v1, parser/validation, compiled policy cache, explanations och policy test runner.
 - ISSUE-061 — Rebrand `tokenix` → `tokenizer`.
 - ISSUE-062 — Context-processor pipeline (interface only).
 
 Redo för agent:
 
-- ISSUE-023 till ISSUE-060.
+- ISSUE-025 till ISSUE-060.
 - ISSUE-063 — Policy-gated context pipeline activation.
 
 Inga issues är markerade `needs-triage`, `needs-info`, `ready-for-human` eller `wontfix` efter denna pass.

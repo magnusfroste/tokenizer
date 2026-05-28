@@ -6,7 +6,7 @@
 - `type: test`
 - `sprint: 04`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 

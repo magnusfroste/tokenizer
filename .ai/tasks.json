@@ -180,17 +180,17 @@
       "id": "ISSUE-023",
       "title": "Implementera policy explanations",
       "source": "05-issues/ISSUE-023-implementera-policy-explanations.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-28T18:08:15+02:00"
     },
     {
       "id": "ISSUE-024",
       "title": "Implementera policy test runner",
       "source": "05-issues/ISSUE-024-implementera-policy-test-runner.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-28T18:14:13+02:00"
     },
     {
       "id": "ISSUE-025",

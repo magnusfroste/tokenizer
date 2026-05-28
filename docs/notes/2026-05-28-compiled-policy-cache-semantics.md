@@ -14,6 +14,7 @@ Parser structs are not the same as fast-path policy semantics. The compiler must
 - Compile and validate every candidate policy before swapping the active cache.
 - Keep cache lookups in-memory and scope-aware: project policy, then tenant policy, then default policy.
 - Apply stricter constraint semantics during evaluation: allowed lists intersect, denied/capability lists union, max cost/latency keep the minimum, and `retention: none` wins over `standard`.
+- Treat defaults as fill-only values. A catch-all default rule must not overwrite a value set by an earlier, more specific default rule.
 
 ## Failure Signals
 
@@ -21,9 +22,11 @@ Parser structs are not the same as fast-path policy semantics. The compiler must
 - Failed policy reload replaces or clears the last good active policy.
 - Project-scoped cache entries are accepted without a tenant id.
 - Multiple matching constraint rules append allowlists or raise cost/latency ceilings instead of narrowing them.
+- A specific default such as `trivial_git -> cheap` is overwritten by the catch-all `when: {}` default.
 
 ## Next Checklist
 
 - [ ] Re-read `06-engineering/01-routing-policy-reference.md` before changing compiled policy semantics.
 - [ ] Add focused tests for hint normalization and multi-rule constraint merging.
+- [ ] Include a policy test-runner case that proves specific defaults survive later catch-all defaults.
 - [ ] Run `go test ./internal/policy` and `go test ./...`.

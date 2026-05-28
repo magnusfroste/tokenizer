@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -30,6 +32,9 @@ func TestCompileBuildsFastPathMatchers(t *testing.T) {
 	if strings.Join(decision.MatchedRuleIDs, ",") != "auth_premium,default_balanced" {
 		t.Fatalf("matched rules = %v", decision.MatchedRuleIDs)
 	}
+	if !containsExplanation(decision.Explanations, "Policy rule auth_premium matched") {
+		t.Fatalf("missing matched-rule explanation: %v", decision.Explanations)
+	}
 	if decision.Route.Force == nil || decision.Route.Force.ModelProfileName != "premium-reasoning" {
 		t.Fatalf("force route not applied: %+v", decision.Route.Force)
 	}
@@ -52,6 +57,89 @@ func TestCompileBlockStopsEvaluation(t *testing.T) {
 	}
 	if decision.Route.Block == nil || decision.Route.Block.Code != "router_disabled" {
 		t.Fatalf("block route not applied: %+v", decision.Route.Block)
+	}
+}
+
+func TestCompileExplainsShadowedForceFields(t *testing.T) {
+	src := `
+version: pv_force_shadow
+settings:
+  default_model_profile: balanced
+  conservative_unknowns: true
+  max_router_overhead_ms: 100
+  default_timeout_ms: 30000
+  default_retention: standard
+rules:
+  - id: first_force
+    when:
+      task_type: security_review
+    route:
+      force:
+        model_profile: premium
+        timeout_ms: 45000
+  - id: second_force
+    when:
+      task_type: security_review
+    route:
+      force:
+        model_profile: cheap
+        timeout_ms: 10000
+`
+	compiled, err := Compile(mustParse(t, src), testSnapshot(t))
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	decision := compiled.Evaluate(EvaluationInput{TaskType: "security_review"})
+	if decision.Route.Force == nil || decision.Route.Force.ModelProfile != ProfilePremium {
+		t.Fatalf("first force model_profile should win: %+v", decision.Route.Force)
+	}
+	if decision.Route.Force.TimeoutMS == nil || *decision.Route.Force.TimeoutMS != 45000 {
+		t.Fatalf("first force timeout should win: %+v", decision.Route.Force)
+	}
+	if !containsExplanation(decision.Explanations, "force.model_profile ignored") {
+		t.Fatalf("missing shadow explanation: %v", decision.Explanations)
+	}
+	if !containsExplanation(decision.Explanations, "force.timeout_ms ignored") {
+		t.Fatalf("missing timeout shadow explanation: %v", decision.Explanations)
+	}
+}
+
+func TestExplainEnabledReadsRouterHeader(t *testing.T) {
+	headers := http.Header{}
+	if ExplainEnabled(headers) {
+		t.Fatalf("explain should default off")
+	}
+	headers.Set("X-Router-Explain", "true")
+	if !ExplainEnabled(headers) {
+		t.Fatalf("explain should be enabled")
+	}
+	headers.Set("X-Router-Explain", "0")
+	if ExplainEnabled(headers) {
+		t.Fatalf("explain should reject non-truthy values")
+	}
+}
+
+func TestEvaluationLogFieldsAreSafeAndStructured(t *testing.T) {
+	compiled, err := Compile(mustParse(t, validPolicy), testSnapshot(t))
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	decision := compiled.Evaluate(EvaluationInput{
+		TaskType:     "hard_code_debugging",
+		RiskLevel:    "critical",
+		FilesTouched: []string{"src/auth/session.ts"},
+		ContainsText: "raw prompt should not appear in log fields unless a policy reason includes it",
+	})
+	fields := decision.LogFields()
+	if len(fields)%2 != 0 {
+		t.Fatalf("log fields should be key/value pairs: %v", fields)
+	}
+	joined := fmt.Sprint(fields)
+	if strings.Contains(joined, "raw prompt") {
+		t.Fatalf("log fields leaked ContainsText: %v", fields)
+	}
+	if !strings.Contains(joined, "auth_premium") {
+		t.Fatalf("log fields should include matched rules: %v", fields)
 	}
 }
 
@@ -194,4 +282,13 @@ func TestCacheRejectsProjectScopeWithoutTenant(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "requires tenant id") {
 		t.Fatalf("expected project without tenant error, got %v", err)
 	}
+}
+
+func containsExplanation(explanations []string, fragment string) bool {
+	for _, explanation := range explanations {
+		if strings.Contains(explanation, fragment) {
+			return true
+		}
+	}
+	return false
 }
