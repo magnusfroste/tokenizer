@@ -216,6 +216,18 @@ func TestParseRejectsInvalidCapability(t *testing.T) {
 	}
 }
 
+func TestParseRejectsUnsupportedFallbackModelsHint(t *testing.T) {
+	src := strings.Replace(validPolicy,
+		"defaults:\n        model_profile: balanced",
+		"fallback_models: [balanced-coder]",
+		1,
+	)
+	_, err := Parse([]byte(src))
+	if err == nil || !strings.Contains(err.Error(), "fallback_models") {
+		t.Fatalf("expected fallback_models error, got %v", err)
+	}
+}
+
 func TestParseRejectsEmptyDocument(t *testing.T) {
 	_, err := Parse(nil)
 	if err == nil {

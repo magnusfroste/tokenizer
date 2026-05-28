@@ -5,8 +5,9 @@
 // 06-engineering/01-routing-policy-reference.md. This package owns the in-memory
 // representation of a parsed policy plus validation against the model registry.
 //
-// ISSUE-021 scope: parsing and validation only. Rule evaluation, compilation to
-// fast-path matchers, explanations and the test runner come in ISSUE-022–024.
+// ISSUE-021 covered parsing and validation. ISSUE-022 adds compiled fast-path
+// matchers and an atomic in-memory cache. Explanations and the test runner come
+// in ISSUE-023–024.
 package policy
 
 // ModelProfile is the broad v1 profile vocabulary.
@@ -145,16 +146,16 @@ type Route struct {
 // RouteHints mirrors the deprecated single-level hints listed in §6.5 of the
 // reference. They are captured verbatim during parse; mapping happens later.
 type RouteHints struct {
-	Tier               string
-	Model              string
-	Provider           string
-	FallbackTier       string
-	FallbackModels     []string
-	Verifier           *bool
-	MaxCostUSD         *float64
-	TimeoutMS          *int
-	Retention          string
-	RequireCapability  string
+	Tier              string
+	Model             string
+	Provider          string
+	FallbackTier      string
+	FallbackModels    []string
+	Verifier          *bool
+	MaxCostUSD        *float64
+	TimeoutMS         *int
+	Retention         string
+	RequireCapability string
 }
 
 type Block struct {

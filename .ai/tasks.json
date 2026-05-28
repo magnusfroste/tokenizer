@@ -172,9 +172,9 @@
       "id": "ISSUE-022",
       "title": "Implementera compiled policy cache",
       "source": "05-issues/ISSUE-022-implementera-compiled-policy-cache.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-05-28T15:21:17+02:00"
     },
     {
       "id": "ISSUE-023",

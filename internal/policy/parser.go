@@ -97,11 +97,11 @@ func Validate(p *Policy, snapshot *registry.Snapshot) error {
 // intentionally do not use struct tags on the Policy type itself so the public
 // API stays pure Go.
 type rawPolicy struct {
-	Version  string          `yaml:"version"`
-	Metadata *rawMetadata    `yaml:"metadata"`
-	Settings *rawSettings    `yaml:"settings"`
-	Rules    []rawRule       `yaml:"rules"`
-	Extra    map[string]any  `yaml:",inline"`
+	Version  string         `yaml:"version"`
+	Metadata *rawMetadata   `yaml:"metadata"`
+	Settings *rawSettings   `yaml:"settings"`
+	Rules    []rawRule      `yaml:"rules"`
+	Extra    map[string]any `yaml:",inline"`
 }
 
 type rawMetadata struct {
@@ -396,6 +396,11 @@ func parseRoute(node *yaml.Node, ctx string) (Route, error) {
 			ss, err := decodeStringList(val, ctx+".route.fallback_models")
 			if err != nil {
 				return out, err
+			}
+			for _, s := range ss {
+				if !isValidProfileOrFallback(s) {
+					return out, fmt.Errorf("%w: %s.route.fallback_models %q must be cheap|balanced|premium", ErrInvalidPolicy, ctx, s)
+				}
 			}
 			out.Hints.FallbackModels = ss
 		case "verifier":

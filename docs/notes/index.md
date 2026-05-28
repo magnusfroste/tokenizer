@@ -8,6 +8,7 @@ This index is a retrieval map for reusable project lessons. Open only notes rele
 - 2026-05-19 - [Immutable Registry Snapshots](2026-05-19-immutable-registry-snapshots.md): open when changing registry/profile snapshot fields, lookup helpers, capability filters, or health overlays.
 - 2026-05-19 - [Context Processor Timeout Isolation](2026-05-19-context-processor-timeout-isolation.md): open when adding mutable request processors, nested request cloning, timeout handling, or fail-open pipeline behavior.
 - 2026-05-19 - [Job Descriptor Trust Boundaries](2026-05-19-job-descriptor-trust-boundaries.md): open when mapping client metadata/headers into routing, policy, classifier, or descriptor logging fields.
+- 2026-05-28 - [Compiled Policy Cache Semantics](2026-05-28-compiled-policy-cache-semantics.md): open when changing policy compilation, route hint mapping, cache reload, or constraint aggregation.
 - 2026-05-19 - [Backlog Triage State Sync](2026-05-19-backlog-triage-state-sync.md): open when issue labels, `.ai/tasks.json`, and next-task selection might disagree.
 - 2026-05-19 - [Classifier Keyword Boundaries](2026-05-19-classifier-keyword-boundaries.md): open when adding or widening classifier keyword rules for task, risk, sensitivity, or feature extraction.
 
@@ -18,6 +19,7 @@ This index is a retrieval map for reusable project lessons. Open only notes rele
 
 ## Policy
 
+- 2026-05-28 - [Compiled Policy Cache Semantics](2026-05-28-compiled-policy-cache-semantics.md): compiled policy snapshots, tenant/project cache lookup, route hint normalization, reload safety, constraint merge semantics.
 - 2026-05-19 - [Job Descriptor Trust Boundaries](2026-05-19-job-descriptor-trust-boundaries.md): client `risk_level`, `task_type`, and sensitivity metadata stay hints until classifier/policy truth is applied.
 
 ## Providers
@@ -38,6 +40,7 @@ No notes yet.
 
 ## Performance
 
+- 2026-05-28 - [Compiled Policy Cache Semantics](2026-05-28-compiled-policy-cache-semantics.md): validate and compile before atomic cache swap; fast-path evaluation should do only in-memory matcher checks.
 - 2026-05-19 - [Classifier Keyword Boundaries](2026-05-19-classifier-keyword-boundaries.md): deterministic in-memory keyword matching; prefer bounded scans and explicit terms over broad prompt-derived outputs.
 - 2026-05-19 - [Streaming Adapter Compatibility](2026-05-19-streaming-adapter-compatibility.md): first emitted stream chunk is the fallback boundary; do not retry after data is flushed.
 - 2026-05-19 - [Immutable Registry Snapshots](2026-05-19-immutable-registry-snapshots.md): clone map/slice metadata on snapshot ingress and egress while keeping lookups deterministic and in-memory.
@@ -59,3 +62,4 @@ No notes yet.
 | 2026-05-19 | [Context Processor Timeout Isolation](2026-05-19-context-processor-timeout-isolation.md) | contextproc, hard timeout, goroutine, race, nested metadata/tools clone |
 | 2026-05-19 | [Job Descriptor Trust Boundaries](2026-05-19-job-descriptor-trust-boundaries.md) | JobDescriptor, trusted auth, untrusted metadata hints, risk hint, safe logging |
 | 2026-05-19 | [Classifier Keyword Boundaries](2026-05-19-classifier-keyword-boundaries.md) | classifier, keywords, word boundary, false positive, sensitivity hints |
+| 2026-05-28 | [Compiled Policy Cache Semantics](2026-05-28-compiled-policy-cache-semantics.md) | policy compiler, cache reload, route hints, constraint merge, tenant project scope |
