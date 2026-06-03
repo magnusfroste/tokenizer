@@ -6,7 +6,7 @@
 - `type: backend`
 - `sprint: 05`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 

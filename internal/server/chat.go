@@ -10,17 +10,38 @@ import (
 	"time"
 
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
+	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/middleware"
 	"github.com/magnusfroste/tokenizer/internal/openai"
+	"github.com/magnusfroste/tokenizer/internal/policy"
 	"github.com/magnusfroste/tokenizer/internal/provider"
 	"github.com/magnusfroste/tokenizer/internal/router"
 	"github.com/magnusfroste/tokenizer/internal/tenant"
 )
 
+// firstTokenTimeoutMS is how long to wait for the first streaming chunk before
+// attempting the next fallback provider.
+const firstTokenTimeoutMS = 10_000
+
+// ChatOptions configures the chat completions handler.
 type ChatOptions struct {
 	ContextPipeline        *contextproc.Pipeline
 	ContextPipelineEnabled bool
 	Logger                 *slog.Logger
+
+	// Routing (Sprint 05). Optional — if Engine is nil the handler uses the
+	// single Provider passed to ChatCompletionsHandler.
+	Engine      *engine.Engine
+	Adapters    map[string]provider.Adapter // provider ID → adapter
+	PolicyCache *policy.Cache
+}
+
+// streamCandidate is one entry in the ordered streaming attempt list.
+type streamCandidate struct {
+	adapter         provider.StreamingAdapter
+	providerModelID string
+	modelID         string
+	providerID      string
 }
 
 func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.HandlerFunc {
@@ -38,7 +59,23 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 			writeError(w, http.StatusBadRequest, "invalid_request_error", "messages cannot be empty")
 			return
 		}
+
 		normalized := provider.NormalizeChatRequest(&req)
+
+		// Build JobDescriptor for every request (fast, pure in-memory).
+		var auth router.AuthTenantContext
+		if t, ok := tenant.FromContext(r.Context()); ok {
+			auth.TenantID = t.ID
+			auth.ProjectID = t.Project
+		}
+		job := router.NewJobDescriptor(router.JobDescriptorInput{
+			RequestID: middleware.RequestIDFromContext(r.Context()),
+			Auth:      auth,
+			Headers:   r.Header,
+			Request:   &req,
+		})
+
+		// Context pipeline (optional).
 		if cfg.ContextPipelineEnabled {
 			pipeline := cfg.ContextPipeline
 			if pipeline == nil {
@@ -49,17 +86,6 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 				pipelineCopy.Logger = cfg.Logger
 				pipeline = &pipelineCopy
 			}
-			var auth router.AuthTenantContext
-			if t, ok := tenant.FromContext(r.Context()); ok {
-				auth.TenantID = t.ID
-				auth.ProjectID = t.Project
-			}
-			job := router.NewJobDescriptor(router.JobDescriptorInput{
-				RequestID: middleware.RequestIDFromContext(r.Context()),
-				Auth:      auth,
-				Headers:   r.Header,
-				Request:   &req,
-			})
 			result := pipeline.Run(r.Context(), normalized, job)
 			if result.TotalTokensSaved > 0 {
 				w.Header().Set("X-Router-Context-Savings", strconv.Itoa(result.TotalTokensSaved))
@@ -67,27 +93,204 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 			if len(result.Applied) > 0 || len(result.Skipped) > 0 {
 				logContextPipeline(r, cfg.Logger, result)
 			}
-			// TODO: Re-estimate prompt_tokens_estimate after real processors mutate context.
 		}
 
+		// Routing engine path.
+		if cfg.Engine != nil && len(cfg.Adapters) > 0 {
+			pol := lookupPolicy(cfg.PolicyCache, job)
+			dec, err := cfg.Engine.Decide(job, pol, engine.FullyHealthy, req.Stream)
+			if err != nil {
+				if errors.Is(err, engine.ErrBlocked) {
+					status := dec.BlockStatus
+					if status == 0 {
+						status = http.StatusForbidden
+					}
+					writeError(w, status, dec.BlockCode, dec.BlockReason)
+					return
+				}
+				writeError(w, http.StatusBadGateway, "no_route", err.Error())
+				return
+			}
+
+			w.Header().Set("X-Router-Selected-Model", dec.SelectedModel)
+			w.Header().Set("X-Router-Policy-Version", dec.PolicyVersion)
+			w.Header().Set("X-Router-Route-Class", string(job.TaskType))
+
+			if req.Stream {
+				candidates := buildStreamCandidates(dec, cfg.Adapters)
+				if len(candidates) > 0 {
+					normalized.Model = candidates[0].providerModelID
+					streamWithFallback(w, r, candidates, normalized, cfg.Logger)
+					return
+				}
+			}
+
+			if adapter, ok := cfg.Adapters[dec.SelectedProvider]; ok {
+				normalized.Model = dec.ProviderModelID
+				resp, err := adapter.Complete(r.Context(), normalized)
+				if err != nil {
+					status, code := mapProviderError(err)
+					writeError(w, status, code, err.Error())
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(resp)
+				return
+			}
+			// Fall through if adapter not found.
+		}
+
+		// Legacy path: single provider, no routing.
 		if req.Stream {
 			streamChatCompletion(w, r, p, normalized, cfg.Logger)
 			return
 		}
-
 		resp, err := p.Complete(r.Context(), normalized)
 		if err != nil {
 			status, code := mapProviderError(err)
 			writeError(w, status, code, err.Error())
 			return
 		}
-
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Router-Selected-Model", resp.Model)
 		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
 
+// buildStreamCandidates converts a RouteDecision into an ordered attempt list
+// for streaming. Primary is always first.
+func buildStreamCandidates(dec engine.RouteDecision, adapters map[string]provider.Adapter) []streamCandidate {
+	var result []streamCandidate
+	add := func(providerID, providerModelID, modelID string) {
+		a, ok := adapters[providerID]
+		if !ok {
+			return
+		}
+		sa, ok := a.(provider.StreamingAdapter)
+		if !ok {
+			return
+		}
+		result = append(result, streamCandidate{
+			adapter:         sa,
+			providerModelID: providerModelID,
+			modelID:         modelID,
+			providerID:      providerID,
+		})
+	}
+	add(dec.SelectedProvider, dec.ProviderModelID, dec.SelectedModel)
+	for _, fb := range dec.Fallbacks {
+		add(fb.ProviderID, fb.ProviderModelID, fb.ModelID)
+	}
+	return result
+}
+
+// streamWithFallback attempts streaming from each candidate in order.
+// It falls back to the next candidate if the connection fails or if no first
+// token arrives within firstTokenTimeoutMS (ISSUE-030).
+func streamWithFallback(
+	w http.ResponseWriter,
+	r *http.Request,
+	candidates []streamCandidate,
+	normalized *provider.NormalizedModelRequest,
+	logger *slog.Logger,
+) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming_unavailable", "response writer does not support streaming")
+		return
+	}
+
+	for i, c := range candidates {
+		req := normalized.Clone()
+		req.Model = c.providerModelID
+
+		chunks, err := c.adapter.Stream(r.Context(), req)
+		if err != nil {
+			logStreamAttempt(r, logger, c, i, "stream_open_error", err)
+			continue
+		}
+
+		// Wait for the first chunk within the first-token timeout.
+		timer := time.NewTimer(firstTokenTimeoutMS * time.Millisecond)
+		var firstChunk provider.StreamChunk
+		var gotFirst bool
+		select {
+		case chunk, chanOk := <-chunks:
+			timer.Stop()
+			if !chanOk {
+				logStreamAttempt(r, logger, c, i, "stream_channel_closed", nil)
+				continue
+			}
+			firstChunk = chunk
+			gotFirst = true
+		case <-timer.C:
+			logStreamAttempt(r, logger, c, i, "first_token_timeout", nil)
+			continue
+		case <-r.Context().Done():
+			timer.Stop()
+			return
+		}
+
+		if !gotFirst {
+			continue
+		}
+
+		// First token received — write headers and stream to completion.
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Router-Selected-Model", c.modelID)
+		w.Header().Set("X-Router-First-Token-Sent", "true")
+		started := time.Now()
+
+		if firstChunk.Err != nil {
+			if i+1 < len(candidates) {
+				logStreamAttempt(r, logger, c, i, "first_chunk_error", firstChunk.Err)
+				continue
+			}
+			status, code := mapProviderError(firstChunk.Err)
+			writeError(w, status, code, firstChunk.Err.Error())
+			return
+		}
+		if firstChunk.Done {
+			writeSSEData(w, []byte("[DONE]"))
+			flusher.Flush()
+			return
+		}
+		if len(firstChunk.Data) > 0 {
+			writeSSEData(w, firstChunk.Data)
+			flusher.Flush()
+		}
+		w.Header().Set("X-Router-First-Token-Ms", strconv.FormatInt(time.Since(started).Milliseconds(), 10))
+
+		// Drain the rest.
+		for chunk := range chunks {
+			if chunk.Err != nil {
+				writeSSEError(w, provider.ErrStreamInterrupted.Error(), chunk.Err.Error())
+				flusher.Flush()
+				logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), chunk.Err)
+				return
+			}
+			if chunk.Done {
+				writeSSEData(w, []byte("[DONE]"))
+				flusher.Flush()
+				logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), nil)
+				return
+			}
+			if len(chunk.Data) > 0 {
+				writeSSEData(w, chunk.Data)
+				flusher.Flush()
+			}
+		}
+		logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), nil)
+		return
+	}
+
+	// All candidates exhausted.
+	writeError(w, http.StatusBadGateway, "provider_error", "all streaming candidates failed or timed out")
+}
+
+// streamChatCompletion is the legacy single-provider streaming path.
 func streamChatCompletion(w http.ResponseWriter, r *http.Request, p provider.Adapter, normalized *provider.NormalizedModelRequest, logger *slog.Logger) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -128,10 +331,9 @@ func streamChatCompletion(w http.ResponseWriter, r *http.Request, p provider.Ada
 			}
 			writeSSEError(w, provider.ErrStreamInterrupted.Error(), chunk.Err.Error())
 			flusher.Flush()
-			logStreamResult(r, logger, p, normalized, true, firstTokenMs, chunk.Err)
+			logStreamResult(r, logger, p.Name(), normalized.Model, true, firstTokenMs, chunk.Err)
 			return
 		}
-
 		if !firstChunkSent {
 			firstChunkSent = true
 			firstTokenMs = time.Since(started).Milliseconds()
@@ -141,7 +343,7 @@ func streamChatCompletion(w http.ResponseWriter, r *http.Request, p provider.Ada
 		if chunk.Done {
 			writeSSEData(w, []byte("[DONE]"))
 			flusher.Flush()
-			logStreamResult(r, logger, p, normalized, true, firstTokenMs, nil)
+			logStreamResult(r, logger, p.Name(), normalized.Model, true, firstTokenMs, nil)
 			return
 		}
 		if len(chunk.Data) == 0 {
@@ -150,8 +352,7 @@ func streamChatCompletion(w http.ResponseWriter, r *http.Request, p provider.Ada
 		writeSSEData(w, chunk.Data)
 		flusher.Flush()
 	}
-
-	logStreamResult(r, logger, p, normalized, firstChunkSent, firstTokenMs, nil)
+	logStreamResult(r, logger, p.Name(), normalized.Model, firstChunkSent, firstTokenMs, nil)
 }
 
 func writeSSEData(w http.ResponseWriter, data []byte) {
@@ -168,14 +369,31 @@ func writeSSEError(w http.ResponseWriter, code, msg string) {
 	writeSSEData(w, body)
 }
 
-func logStreamResult(r *http.Request, logger *slog.Logger, p provider.Adapter, normalized *provider.NormalizedModelRequest, firstChunkSent bool, firstTokenMs int64, err error) {
+func logStreamAttempt(r *http.Request, logger *slog.Logger, c streamCandidate, attempt int, reason string, err error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	attrs := []any{
 		"request_id", middleware.RequestIDFromContext(r.Context()),
-		"provider", p.Name(),
-		"model", normalized.Model,
+		"attempt", attempt,
+		"model", c.modelID,
+		"provider", c.providerID,
+		"reason", reason,
+	}
+	if err != nil {
+		attrs = append(attrs, "error", err.Error())
+	}
+	logger.WarnContext(r.Context(), "stream_fallback", attrs...)
+}
+
+func logStreamResult(r *http.Request, logger *slog.Logger, providerName, model string, firstChunkSent bool, firstTokenMs int64, err error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	attrs := []any{
+		"request_id", middleware.RequestIDFromContext(r.Context()),
+		"provider", providerName,
+		"model", model,
 		"first_token_sent", firstChunkSent,
 		"first_token_ms", firstTokenMs,
 	}

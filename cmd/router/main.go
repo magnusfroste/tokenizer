@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/magnusfroste/tokenizer/internal/auth"
+	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/provider"
+	"github.com/magnusfroste/tokenizer/internal/registry"
 	"github.com/magnusfroste/tokenizer/internal/server"
 	"github.com/magnusfroste/tokenizer/internal/tenant"
 )
@@ -42,11 +44,31 @@ func main() {
 		Client:  &http.Client{Timeout: 30 * time.Second},
 	}
 
+	snap, err := registry.DefaultSnapshot()
+	if err != nil {
+		logger.Error("failed to build registry", "err", err)
+		os.Exit(1)
+	}
+	store, err := registry.NewStore(snap)
+	if err != nil {
+		logger.Error("failed to create registry store", "err", err)
+		os.Exit(1)
+	}
+	eng := engine.New(store)
+
+	// In local dev the mock adapter serves all providers.
+	adapters := map[string]provider.Adapter{
+		"openai":    mock,
+		"anthropic": mock,
+	}
+
 	handler := server.New(server.Config{
 		Logger:                 logger,
 		KeyStore:               keyStore,
 		Provider:               mock,
 		ContextPipelineEnabled: parseBoolEnv(os.Getenv("ROUTER_CONTEXT_PIPELINE_ENABLED")),
+		Engine:                 eng,
+		Adapters:               adapters,
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")
