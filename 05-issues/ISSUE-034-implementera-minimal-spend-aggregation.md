@@ -6,7 +6,7 @@
 - `type: data`
 - `sprint: 06`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 

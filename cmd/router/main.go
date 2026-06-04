@@ -13,9 +13,12 @@ import (
 
 	"github.com/magnusfroste/tokenizer/internal/auth"
 	"github.com/magnusfroste/tokenizer/internal/engine"
+	"github.com/magnusfroste/tokenizer/internal/eventlog"
+	"github.com/magnusfroste/tokenizer/internal/health"
 	"github.com/magnusfroste/tokenizer/internal/provider"
 	"github.com/magnusfroste/tokenizer/internal/registry"
 	"github.com/magnusfroste/tokenizer/internal/server"
+	"github.com/magnusfroste/tokenizer/internal/spend"
 	"github.com/magnusfroste/tokenizer/internal/tenant"
 )
 
@@ -62,6 +65,19 @@ func main() {
 		"anthropic": mock,
 	}
 
+	// Observability: health tracker, spend tracker, event queue.
+	healthTracker := health.New()
+	spendTracker := spend.New()
+	eventQueue := eventlog.NewQueue(0)
+
+	// Build the fan-out event handler: logging + metrics + spend.
+	loggingHandler := &eventlog.LoggingHandler{Logger: logger}
+	combinedHandler := eventlog.MultiHandler(loggingHandler, spendTracker)
+
+	// Start the queue worker in the background.
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	go eventQueue.Run(workerCtx, combinedHandler, logger)
+
 	handler := server.New(server.Config{
 		Logger:                 logger,
 		KeyStore:               keyStore,
@@ -69,6 +85,10 @@ func main() {
 		ContextPipelineEnabled: parseBoolEnv(os.Getenv("ROUTER_CONTEXT_PIPELINE_ENABLED")),
 		Engine:                 eng,
 		Adapters:               adapters,
+		HealthTracker:          healthTracker,
+		SpendTracker:           spendTracker,
+		EventQueue:             eventQueue,
+		RegistryVersion:        snap.RegistryVersion(),
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")
@@ -99,6 +119,7 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown error", "err", err)
 	}
+	workerCancel() // drain event queue gracefully
 }
 
 func parseLogLevel(s string) slog.Level {

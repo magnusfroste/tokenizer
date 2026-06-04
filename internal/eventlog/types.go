@@ -1,0 +1,57 @@
+// Package eventlog defines the async event types emitted by the routing engine
+// and provider executor. The queue is non-blocking; failed enqueues are counted
+// but never propagated to the request path.
+package eventlog
+
+import "time"
+
+// EventType identifies the kind of event.
+type EventType string
+
+const (
+	EventTypeDecision EventType = "decision"
+	EventTypeAttempt  EventType = "attempt"
+)
+
+// Event is the union type enqueued by the router.
+type Event struct {
+	Type     EventType
+	Decision *DecisionEvent
+	Attempt  *AttemptEvent
+}
+
+// DecisionEvent is emitted once per request after the routing engine has
+// selected a model. It captures the full routing context.
+type DecisionEvent struct {
+	RequestID         string
+	TenantID          string
+	ProjectID         string
+	TaskType          string
+	RiskLevel         string
+	Sensitivity       string
+	SelectedModel     string
+	SelectedProvider  string
+	PolicyVersion     string
+	PromptTokens      int
+	EstimatedCostUSD  float64
+	RoutingDurationMs int64
+	Blocked           bool
+	BlockCode         string
+	DecidedAt         time.Time
+}
+
+// AttemptEvent is emitted once per provider call (primary or fallback).
+type AttemptEvent struct {
+	RequestID     string
+	ProviderID    string
+	ModelID       string
+	AttemptIndex  int
+	Success       bool
+	ErrorCode     string
+	DurationMs    int64
+	InputTokens   int
+	OutputTokens  int
+	ActualCostUSD float64
+	FirstTokenMs  int64
+	AttemptedAt   time.Time
+}

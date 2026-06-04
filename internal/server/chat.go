@@ -11,6 +11,8 @@ import (
 
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
 	"github.com/magnusfroste/tokenizer/internal/engine"
+	"github.com/magnusfroste/tokenizer/internal/eventlog"
+	"github.com/magnusfroste/tokenizer/internal/health"
 	"github.com/magnusfroste/tokenizer/internal/middleware"
 	"github.com/magnusfroste/tokenizer/internal/openai"
 	"github.com/magnusfroste/tokenizer/internal/policy"
@@ -34,6 +36,10 @@ type ChatOptions struct {
 	Engine      *engine.Engine
 	Adapters    map[string]provider.Adapter // provider ID → adapter
 	PolicyCache *policy.Cache
+
+	// Observability (Sprint 06). All optional.
+	EventQueue    *eventlog.Queue
+	HealthTracker *health.Tracker
 }
 
 // streamCandidate is one entry in the ordered streaming attempt list.
@@ -98,9 +104,16 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 		// Routing engine path.
 		if cfg.Engine != nil && len(cfg.Adapters) > 0 {
 			pol := lookupPolicy(cfg.PolicyCache, job)
-			dec, err := cfg.Engine.Decide(job, pol, engine.FullyHealthy, req.Stream)
-			if err != nil {
-				if errors.Is(err, engine.ErrBlocked) {
+			routeStart := time.Now()
+			health := cfg.healthSnapshot()
+			dec, decErr := cfg.Engine.Decide(job, pol, health, req.Stream)
+			routingMs := time.Since(routeStart).Milliseconds()
+
+			// Always enqueue a decision event (blocked or not).
+			cfg.enqueueDecision(job, dec, routingMs, decErr)
+
+			if decErr != nil {
+				if errors.Is(decErr, engine.ErrBlocked) {
 					status := dec.BlockStatus
 					if status == 0 {
 						status = http.StatusForbidden
@@ -108,7 +121,7 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 					writeError(w, status, dec.BlockCode, dec.BlockReason)
 					return
 				}
-				writeError(w, http.StatusBadGateway, "no_route", err.Error())
+				writeError(w, http.StatusBadGateway, "no_route", decErr.Error())
 				return
 			}
 
@@ -120,14 +133,17 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 				candidates := buildStreamCandidates(dec, cfg.Adapters)
 				if len(candidates) > 0 {
 					normalized.Model = candidates[0].providerModelID
-					streamWithFallback(w, r, candidates, normalized, cfg.Logger)
+					streamWithFallback(w, r, candidates, normalized, cfg.Logger, cfg.HealthTracker, cfg.EventQueue, job.RequestID)
 					return
 				}
 			}
 
 			if adapter, ok := cfg.Adapters[dec.SelectedProvider]; ok {
 				normalized.Model = dec.ProviderModelID
+				start := time.Now()
 				resp, err := adapter.Complete(r.Context(), normalized)
+				durationMs := time.Since(start).Milliseconds()
+				cfg.recordAttempt(job.RequestID, dec.SelectedProvider, dec.SelectedModel, 0, resp, err, durationMs, 0)
 				if err != nil {
 					status, code := mapProviderError(err)
 					writeError(w, status, code, err.Error())
@@ -193,6 +209,9 @@ func streamWithFallback(
 	candidates []streamCandidate,
 	normalized *provider.NormalizedModelRequest,
 	logger *slog.Logger,
+	healthTracker *health.Tracker,
+	queue *eventlog.Queue,
+	requestID string,
 ) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -200,13 +219,45 @@ func streamWithFallback(
 		return
 	}
 
+	recordStream := func(c streamCandidate, i int, firstTokenMs, durationMs int64, err error) {
+		if healthTracker != nil {
+			if err == nil {
+				healthTracker.RecordSuccess(c.providerID)
+			} else {
+				healthTracker.RecordFailure(c.providerID)
+			}
+		}
+		if queue != nil {
+			code := ""
+			if err != nil {
+				_, code = mapProviderError(err)
+			}
+			queue.Enqueue(eventlog.Event{
+				Type: eventlog.EventTypeAttempt,
+				Attempt: &eventlog.AttemptEvent{
+					RequestID:    requestID,
+					ProviderID:   c.providerID,
+					ModelID:      c.modelID,
+					AttemptIndex: i,
+					Success:      err == nil,
+					ErrorCode:    code,
+					DurationMs:   durationMs,
+					FirstTokenMs: firstTokenMs,
+					AttemptedAt:  time.Now(),
+				},
+			})
+		}
+	}
+
 	for i, c := range candidates {
 		req := normalized.Clone()
 		req.Model = c.providerModelID
+		attemptStart := time.Now()
 
 		chunks, err := c.adapter.Stream(r.Context(), req)
 		if err != nil {
 			logStreamAttempt(r, logger, c, i, "stream_open_error", err)
+			recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), err)
 			continue
 		}
 
@@ -219,12 +270,14 @@ func streamWithFallback(
 			timer.Stop()
 			if !chanOk {
 				logStreamAttempt(r, logger, c, i, "stream_channel_closed", nil)
+				recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), fmt.Errorf("channel closed"))
 				continue
 			}
 			firstChunk = chunk
 			gotFirst = true
 		case <-timer.C:
 			logStreamAttempt(r, logger, c, i, "first_token_timeout", nil)
+			recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), provider.ErrProviderTimeout)
 			continue
 		case <-r.Context().Done():
 			timer.Stop()
@@ -235,19 +288,24 @@ func streamWithFallback(
 			continue
 		}
 
+		firstTokenMs := time.Since(attemptStart).Milliseconds()
+
 		// First token received — write headers and stream to completion.
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("X-Router-Selected-Model", c.modelID)
 		w.Header().Set("X-Router-First-Token-Sent", "true")
+		w.Header().Set("X-Router-First-Token-Ms", strconv.FormatInt(firstTokenMs, 10))
 		started := time.Now()
 
 		if firstChunk.Err != nil {
 			if i+1 < len(candidates) {
 				logStreamAttempt(r, logger, c, i, "first_chunk_error", firstChunk.Err)
+				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), firstChunk.Err)
 				continue
 			}
+			recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), firstChunk.Err)
 			status, code := mapProviderError(firstChunk.Err)
 			writeError(w, status, code, firstChunk.Err.Error())
 			return
@@ -255,13 +313,13 @@ func streamWithFallback(
 		if firstChunk.Done {
 			writeSSEData(w, []byte("[DONE]"))
 			flusher.Flush()
+			recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), nil)
 			return
 		}
 		if len(firstChunk.Data) > 0 {
 			writeSSEData(w, firstChunk.Data)
 			flusher.Flush()
 		}
-		w.Header().Set("X-Router-First-Token-Ms", strconv.FormatInt(time.Since(started).Milliseconds(), 10))
 
 		// Drain the rest.
 		for chunk := range chunks {
@@ -269,12 +327,14 @@ func streamWithFallback(
 				writeSSEError(w, provider.ErrStreamInterrupted.Error(), chunk.Err.Error())
 				flusher.Flush()
 				logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), chunk.Err)
+				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), chunk.Err)
 				return
 			}
 			if chunk.Done {
 				writeSSEData(w, []byte("[DONE]"))
 				flusher.Flush()
 				logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), nil)
+				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), nil)
 				return
 			}
 			if len(chunk.Data) > 0 {
@@ -283,6 +343,7 @@ func streamWithFallback(
 			}
 		}
 		logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), nil)
+		recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), nil)
 		return
 	}
 
@@ -415,6 +476,80 @@ func logContextPipeline(r *http.Request, logger *slog.Logger, result contextproc
 		"context_processors_skipped", result.Skipped,
 		"context_tokens_saved", result.TotalTokensSaved,
 	)
+}
+
+// --- Observability helpers ---
+
+// healthSnapshot returns the current health snapshot; if no tracker is
+// configured returns engine.FullyHealthy.
+func (o *ChatOptions) healthSnapshot() engine.HealthSnapshot {
+	if o.HealthTracker != nil {
+		return o.HealthTracker
+	}
+	return engine.FullyHealthy
+}
+
+// enqueueDecision enqueues a DecisionEvent if a queue is configured.
+func (o *ChatOptions) enqueueDecision(job *router.JobDescriptor, dec engine.RouteDecision, routingMs int64, decErr error) {
+	if o.EventQueue == nil {
+		return
+	}
+	d := &eventlog.DecisionEvent{
+		RequestID:         job.RequestID,
+		TenantID:          job.TenantID,
+		ProjectID:         job.ProjectID,
+		TaskType:          string(job.TaskType),
+		RiskLevel:         string(job.RiskLevel),
+		Sensitivity:       string(job.Sensitivity),
+		SelectedModel:     dec.SelectedModel,
+		SelectedProvider:  dec.SelectedProvider,
+		PolicyVersion:     dec.PolicyVersion,
+		PromptTokens:      job.PromptTokensEstimate,
+		EstimatedCostUSD:  dec.EstimatedCostUSD,
+		RoutingDurationMs: routingMs,
+		Blocked:           dec.Blocked,
+		BlockCode:         dec.BlockCode,
+		DecidedAt:         time.Now(),
+	}
+	o.EventQueue.Enqueue(eventlog.Event{Type: eventlog.EventTypeDecision, Decision: d})
+}
+
+// recordAttempt updates the health tracker and enqueues an AttemptEvent.
+func (o *ChatOptions) recordAttempt(requestID, providerID, modelID string, attemptIdx int, resp *openai.ChatResponse, err error, durationMs, firstTokenMs int64) {
+	success := err == nil
+	if o.HealthTracker != nil {
+		if success {
+			o.HealthTracker.RecordSuccess(providerID)
+		} else {
+			o.HealthTracker.RecordFailure(providerID)
+		}
+	}
+	if o.EventQueue == nil {
+		return
+	}
+	a := &eventlog.AttemptEvent{
+		RequestID:    requestID,
+		ProviderID:   providerID,
+		ModelID:      modelID,
+		AttemptIndex: attemptIdx,
+		Success:      success,
+		DurationMs:   durationMs,
+		FirstTokenMs: firstTokenMs,
+		AttemptedAt:  time.Now(),
+	}
+	if err != nil {
+		a.ErrorCode = mapProviderErrorCode(err)
+	}
+	if resp != nil {
+		a.InputTokens = resp.Usage.PromptTokens
+		a.OutputTokens = resp.Usage.CompletionTokens
+	}
+	o.EventQueue.Enqueue(eventlog.Event{Type: eventlog.EventTypeAttempt, Attempt: a})
+}
+
+func mapProviderErrorCode(err error) string {
+	_, code := mapProviderError(err)
+	return code
 }
 
 func mapProviderError(err error) (status int, code string) {
