@@ -34,10 +34,14 @@ type DecisionEvent struct {
 	PolicyVersion     string
 	PromptTokens      int
 	EstimatedCostUSD  float64
-	RoutingDurationMs int64
-	Blocked           bool
-	BlockCode         string
-	DecidedAt         time.Time
+	RoutingDurationMs int64 // whole milliseconds, for DB/logs
+	// RoutingDurationMicros preserves sub-millisecond precision for the
+	// latency histogram — routing is typically well under 1 ms, so storing
+	// only whole milliseconds would round every observation to zero.
+	RoutingDurationMicros int64
+	Blocked               bool
+	BlockCode             string
+	DecidedAt             time.Time
 }
 
 // AttemptEvent is emitted once per provider call (primary or fallback).

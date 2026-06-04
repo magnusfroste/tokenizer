@@ -38,9 +38,9 @@ func (h *LoggingHandler) Handle(ctx context.Context, e Event) {
 				status = "blocked"
 			}
 			metrics.RequestsTotal.WithLabelValues(d.TaskType, d.SelectedModel, d.SelectedProvider, status).Inc()
-			if d.RoutingDurationMs > 0 {
-				metrics.RoutingOverheadMs.Observe(float64(d.RoutingDurationMs))
-			}
+			// Observe in fractional milliseconds from the microsecond capture so
+			// sub-millisecond routing is recorded instead of rounding to zero.
+			metrics.RoutingOverheadMs.Observe(float64(d.RoutingDurationMicros) / 1000.0)
 		}
 	case EventTypeAttempt:
 		if a := e.Attempt; a != nil {

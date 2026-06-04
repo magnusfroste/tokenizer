@@ -19,8 +19,8 @@ var (
 	RoutingOverheadMs = promauto.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "router",
 		Name:      "routing_overhead_ms",
-		Help:      "Time spent in the routing engine (ms).",
-		Buckets:   []float64{1, 2, 5, 10, 20, 50, 100, 200},
+		Help:      "Time spent in the routing engine (ms). Routing is typically sub-millisecond, hence fine-grained low buckets.",
+		Buckets:   []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200},
 	})
 
 	// FirstTokenMs records time-to-first-token for streaming requests.

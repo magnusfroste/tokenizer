@@ -107,10 +107,10 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 			routeStart := time.Now()
 			health := cfg.healthSnapshot()
 			dec, decErr := cfg.Engine.Decide(job, pol, health, req.Stream)
-			routingMs := time.Since(routeStart).Milliseconds()
+			routingDur := time.Since(routeStart)
 
 			// Always enqueue a decision event (blocked or not).
-			cfg.enqueueDecision(job, dec, routingMs, decErr)
+			cfg.enqueueDecision(job, dec, routingDur, decErr)
 
 			if decErr != nil {
 				if errors.Is(decErr, engine.ErrBlocked) {
@@ -490,26 +490,27 @@ func (o *ChatOptions) healthSnapshot() engine.HealthSnapshot {
 }
 
 // enqueueDecision enqueues a DecisionEvent if a queue is configured.
-func (o *ChatOptions) enqueueDecision(job *router.JobDescriptor, dec engine.RouteDecision, routingMs int64, decErr error) {
+func (o *ChatOptions) enqueueDecision(job *router.JobDescriptor, dec engine.RouteDecision, routingDur time.Duration, decErr error) {
 	if o.EventQueue == nil {
 		return
 	}
 	d := &eventlog.DecisionEvent{
-		RequestID:         job.RequestID,
-		TenantID:          job.TenantID,
-		ProjectID:         job.ProjectID,
-		TaskType:          string(job.TaskType),
-		RiskLevel:         string(job.RiskLevel),
-		Sensitivity:       string(job.Sensitivity),
-		SelectedModel:     dec.SelectedModel,
-		SelectedProvider:  dec.SelectedProvider,
-		PolicyVersion:     dec.PolicyVersion,
-		PromptTokens:      job.PromptTokensEstimate,
-		EstimatedCostUSD:  dec.EstimatedCostUSD,
-		RoutingDurationMs: routingMs,
-		Blocked:           dec.Blocked,
-		BlockCode:         dec.BlockCode,
-		DecidedAt:         time.Now(),
+		RequestID:             job.RequestID,
+		TenantID:              job.TenantID,
+		ProjectID:             job.ProjectID,
+		TaskType:              string(job.TaskType),
+		RiskLevel:             string(job.RiskLevel),
+		Sensitivity:           string(job.Sensitivity),
+		SelectedModel:         dec.SelectedModel,
+		SelectedProvider:      dec.SelectedProvider,
+		PolicyVersion:         dec.PolicyVersion,
+		PromptTokens:          job.PromptTokensEstimate,
+		EstimatedCostUSD:      dec.EstimatedCostUSD,
+		RoutingDurationMs:     routingDur.Milliseconds(),
+		RoutingDurationMicros: routingDur.Microseconds(),
+		Blocked:               dec.Blocked,
+		BlockCode:             dec.BlockCode,
+		DecidedAt:             time.Now(),
 	}
 	o.EventQueue.Enqueue(eventlog.Event{Type: eventlog.EventTypeDecision, Decision: d})
 }
