@@ -164,6 +164,52 @@ func TestExtractFromMessages(t *testing.T) {
 			},
 		},
 		{
+			name:     "prose debugging terms set code requirement without a stack trace",
+			messages: []openai.Message{{Role: "user", Content: "Debug this hard race condition deadlock in my concurrent Go code, stack trace attached."}},
+			assert: func(t *testing.T, got Features) {
+				if got.HasStackTrace {
+					t.Fatalf("expected no literal stack trace from prose, got %+v", got)
+				}
+				if !got.RequiresCode {
+					t.Fatalf("expected prose debugging terms to require code, got %+v", got)
+				}
+				assertContains(t, got.Keywords, "debug")
+				assertContains(t, got.Keywords, "code")
+				assertContains(t, got.SensitivityHints, "source_code")
+			},
+		},
+		{
+			name:     "individual debugging symptoms require code",
+			messages: []openai.Message{{Role: "user", Content: "My service keeps crashing with a segfault and a nil pointer dereference at startup."}},
+			assert: func(t *testing.T, got Features) {
+				if !got.RequiresCode {
+					t.Fatalf("expected debugging symptoms to require code, got %+v", got)
+				}
+				assertContains(t, got.Keywords, "debug")
+			},
+		},
+		{
+			name:     "coding intent prose requires code",
+			messages: []openai.Message{{Role: "user", Content: "The goroutine deadlocks because the mutex is not thread-safe; help me fix the compile error."}},
+			assert: func(t *testing.T, got Features) {
+				if !got.RequiresCode {
+					t.Fatalf("expected coding intent prose to require code, got %+v", got)
+				}
+				assertContains(t, got.Keywords, "code")
+			},
+		},
+		{
+			name:     "non code prose stays non code",
+			messages: []openai.Message{{Role: "user", Content: "Can you recommend a good restaurant downtown for dinner tonight?"}},
+			assert: func(t *testing.T, got Features) {
+				assertNotContains(t, got.Keywords, "code")
+				assertNotContains(t, got.Keywords, "debug")
+				if got.RequiresCode {
+					t.Fatalf("expected benign prose to stay non-code, got %+v", got)
+				}
+			},
+		},
+		{
 			name:     "single word keywords do not match inside product names",
 			messages: []openai.Message{{Role: "user", Content: "Explain the tokenizer routing overview without changing code."}},
 			assert: func(t *testing.T, got Features) {

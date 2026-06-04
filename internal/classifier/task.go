@@ -38,7 +38,8 @@ func ClassifyTask(features Features, messages []openai.Message) TaskClassificati
 
 	hasSecurityReviewSignal := hasExplicitSecurityReviewSignal(ctx)
 	hasDatabaseMigrationSignal := hasDatabaseMigrationSignal(ctx, features)
-	hasDebugSignal := features.HasStackTrace && (features.RequiresCode || hasAnyKeyword(features.Keywords, "auth", "payment", "security"))
+	hasDebugSignal := (features.HasStackTrace || hasAnyKeyword(features.Keywords, "debug")) &&
+		(features.RequiresCode || hasAnyKeyword(features.Keywords, "code", "auth", "payment", "security"))
 	hasRiskSignal := hasTaskRiskSignal(ctx, features)
 
 	switch {
@@ -159,6 +160,10 @@ func addFeatureSignals(signals *signalSet, features Features) {
 			signals.add("sql_keyword")
 		case "source_code":
 			signals.add("source_code_keyword")
+		case "debug":
+			signals.add("debug_keyword")
+		case "code":
+			signals.add("code_keyword")
 		}
 	}
 	for _, hint := range features.SensitivityHints {
@@ -230,6 +235,9 @@ func hasCreativeCopySignal(ctx taskContext) bool {
 
 func hasStrongTaskIntent(ctx taskContext, features Features) bool {
 	if features.HasStackTrace || features.RequiresLargeContext || features.RequiresToolUse || features.RequiresJSONSchema {
+		return true
+	}
+	if features.RequiresCode || hasAnyKeyword(features.Keywords, "debug", "code") {
 		return true
 	}
 	return hasSummarizationSignal(ctx) ||

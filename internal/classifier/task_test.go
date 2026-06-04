@@ -59,6 +59,18 @@ func TestClassifyTaskGoldenCases(t *testing.T) {
 			wantSignal: "stack_trace",
 		},
 		{
+			name:       "prose race condition debugging is hard code debugging",
+			messages:   []openai.Message{{Role: "user", Content: "Debug this hard race condition deadlock in my concurrent Go code, stack trace attached."}},
+			wantTask:   router.TaskHardCodeDebugging,
+			wantSignal: "debug_keyword",
+		},
+		{
+			name:       "prose segfault debugging is hard code debugging",
+			messages:   []openai.Message{{Role: "user", Content: "My service keeps crashing with a segfault and a nil pointer dereference; help me debug it."}},
+			wantTask:   router.TaskHardCodeDebugging,
+			wantSignal: "debug_keyword",
+		},
+		{
 			name: "migration sql is database migration",
 			messages: []openai.Message{{
 				Role: "user",

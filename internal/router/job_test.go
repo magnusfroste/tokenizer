@@ -185,8 +185,8 @@ func TestNewJobDescriptorCopiesSafeFeatureSignals(t *testing.T) {
 	if !got.RequiresCode || !got.RequiresJSONSchema {
 		t.Fatalf("expected code and json schema requirements, got %+v", got)
 	}
-	if got.TaskType != TaskSimpleCodeEdit {
-		t.Fatalf("expected simple code edit task, got %q", got.TaskType)
+	if got.TaskType != TaskHardCodeDebugging {
+		t.Fatalf("expected hard code debugging task from panic signal, got %q", got.TaskType)
 	}
 	if got.RiskLevel != RiskHigh {
 		t.Fatalf("expected high risk from auth/code features, got %q", got.RiskLevel)

@@ -73,6 +73,28 @@ var keywordRules = []keywordRule{
 	{keyword: "auth", terms: []string{"auth", "authentication", "authorization", "oauth", "session", "jwt", "token", "password", "permission", "rbac"}},
 	{keyword: "payment", terms: []string{"payment", "payments", "billing", "checkout", "stripe", "invoice", "subscription", "refund"}},
 	{keyword: "security", terms: []string{"security", "vulnerability", "xss", "csrf", "ssrf", "injection", "secret", "exploit", "cve"}},
+	{keyword: "debug", terms: []string{
+		"debug", "debugging", "debugger",
+		"stack trace", "stacktrace", "stack-trace", "traceback", "backtrace", "back trace",
+		"race condition", "data race", "deadlock", "dead lock", "livelock",
+		"panic", "segfault", "seg fault", "segmentation fault",
+		"null pointer", "nil pointer", "nullpointer", "null reference",
+		"null pointer exception", "nil pointer dereference",
+		"throws an exception", "throws exception", "exception thrown", "exception is thrown",
+		"unhandled exception", "uncaught exception", "runtime exception", "stack overflow exception",
+		"core dump", "core dumped", "memory leak", "buffer overflow",
+		"index out of range", "index out of bounds", "out of bounds",
+		"infinite loop", "runtime error", "syntax error", "type error",
+		"crashing", "crashes", "crashed", "keeps crashing", "won't compile", "fails to compile",
+	}},
+	{keyword: "code", terms: []string{
+		"concurrent", "concurrency", "goroutine", "goroutines", "mutex", "semaphore",
+		"thread-safe", "thread safe", "multithreaded", "multi-threaded",
+		"go code", "golang", "rust code", "python code", "java code", "javascript code", "c++ code",
+		"my code", "your code", "this code", "the code base", "in my code",
+		"compile", "compiler", "compilation", "recompile",
+		"function call", "stack frame", "unit test", "integration test", "failing test",
+	}},
 	{keyword: "exploit", terms: []string{"exploit", "exploited", "exploitation", "rce", "remote code execution"}},
 	{keyword: "production", terms: []string{"production", "prod", "incident", "down", "outage"}},
 	{keyword: "urgent", terms: []string{"urgent", "asap", "hotfix", "rollback"}},
@@ -167,7 +189,7 @@ func ExtractFromMessages(messages []openai.Message, hints RequestHints) Features
 	f.HasCodeBlock = f.CodeBlockCount > 0
 	f.HasInlineCode = f.InlineCodeCount > 0
 	f.HasStackTrace = f.StackTraceCount > 0
-	f.RequiresCode = f.HasCodeBlock || f.HasInlineCode || f.HasStackTrace || len(f.FilesTouched) > 0 || hasAnyKeyword(f.Keywords, "sql", "migration", "source_code")
+	f.RequiresCode = f.HasCodeBlock || f.HasInlineCode || f.HasStackTrace || len(f.FilesTouched) > 0 || hasAnyKeyword(f.Keywords, "sql", "migration", "source_code", "debug", "code")
 
 	if hasAnyKeyword(f.Keywords, "json_schema") {
 		f.RequiresJSONSchema = true
