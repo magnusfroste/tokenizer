@@ -9,38 +9,43 @@ import (
 	"strings"
 
 	"github.com/magnusfroste/tokenizer/internal/health"
+	"github.com/magnusfroste/tokenizer/internal/outcomes"
 	"github.com/magnusfroste/tokenizer/internal/spend"
 )
 
 // DashboardOptions configures the dashboard handler.
 type DashboardOptions struct {
-	Spend   *spend.Tracker
-	Health  *health.Tracker
-	Logger  *slog.Logger
-	Version string // registry version label
+	Spend    *spend.Tracker
+	Health   *health.Tracker
+	Outcomes *outcomes.Store
+	Logger   *slog.Logger
+	Version  string // registry version label
 }
 
 // DashboardData is the JSON payload returned by /router/dashboard/data.
 type DashboardData struct {
-	Version        string             `json:"registry_version"`
-	TotalRequests  int64              `json:"total_requests"`
-	TotalCostUSD   float64            `json:"total_cost_usd"`
-	RoutesByModel  []spend.ModelRow   `json:"routes_by_model"`
-	SpendByTenant  []spend.TenantRow  `json:"spend_by_tenant"`
-	ProviderHealth map[string]float64 `json:"provider_health"`
+	Version        string                   `json:"registry_version"`
+	TotalRequests  int64                    `json:"total_requests"`
+	TotalCostUSD   float64                  `json:"total_cost_usd"`
+	RoutesByModel  []spend.ModelRow         `json:"routes_by_model"`
+	SpendByTenant  []spend.TenantRow        `json:"spend_by_tenant"`
+	ProviderHealth map[string]float64       `json:"provider_health"`
+	Acceptance     []outcomes.AcceptanceRow `json:"acceptance"`
+	OutcomeCount   int                      `json:"outcome_count"`
+	TaskFilter     string                   `json:"task_filter,omitempty"`
 }
 
 // DashboardHandler returns the /router/dashboard HTML handler and
 // /router/dashboard/data JSON handler.
 func DashboardHandler(opts DashboardOptions) (html http.HandlerFunc, data http.HandlerFunc) {
 	data = func(w http.ResponseWriter, r *http.Request) {
-		d := buildDashboardData(opts)
+		d := buildDashboardData(opts, r.URL.Query().Get("task"))
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(d)
 	}
 
 	html = func(w http.ResponseWriter, r *http.Request) {
-		d := buildDashboardData(opts)
+		d := buildDashboardData(opts, r.URL.Query().Get("task"))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := dashboardTmpl.Execute(w, d); err != nil {
 			slog.Default().Error("dashboard template error", "err", err)
@@ -49,10 +54,11 @@ func DashboardHandler(opts DashboardOptions) (html http.HandlerFunc, data http.H
 	return html, data
 }
 
-func buildDashboardData(opts DashboardOptions) DashboardData {
+func buildDashboardData(opts DashboardOptions, taskFilter string) DashboardData {
 	d := DashboardData{
 		Version:        opts.Version,
 		ProviderHealth: map[string]float64{},
+		TaskFilter:     taskFilter,
 	}
 	if opts.Spend != nil {
 		d.TotalRequests = opts.Spend.TotalRequests()
@@ -62,6 +68,10 @@ func buildDashboardData(opts DashboardOptions) DashboardData {
 	}
 	if opts.Health != nil {
 		d.ProviderHealth = opts.Health.Providers()
+	}
+	if opts.Outcomes != nil {
+		d.OutcomeCount = opts.Outcomes.Count()
+		d.Acceptance = opts.Outcomes.Acceptance(taskFilter)
 	}
 	return d
 }
@@ -180,6 +190,31 @@ section{margin-bottom:2.5rem}
   <td><span class="dot dot-{{healthClass $score}}"></span><span class="{{healthClass $score}}">{{if ge $score 0.9}}Healthy{{else if ge $score 0.5}}Degraded{{else}}Down{{end}}</span></td>
 </tr>
 {{else}}<tr><td colspan="3" style="color:#64748b;text-align:center;padding:1.5rem">No provider calls recorded yet</td></tr>
+{{end}}
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Acceptance feedback {{if .TaskFilter}}<span style="font-size:0.78rem;color:#64748b">· filtered: {{.TaskFilter}}</span>{{end}}</h2>
+<p style="font-size:0.78rem;color:#64748b;margin-bottom:0.6rem">{{.OutcomeCount}} outcome(s) reported · filter by task class via <span class="mono">?task=&lt;task_type&gt;</span></p>
+<table>
+<thead><tr><th>Model</th><th>Task class</th><th>Outcomes</th><th>Accepted</th><th>Rejected</th><th>Partial</th><th>Acceptance rate</th></tr></thead>
+<tbody>
+{{range .Acceptance}}
+<tr>
+  <td class="mono">{{.Model}}</td>
+  <td class="mono">{{.TaskType}}</td>
+  <td>{{.Total}}</td>
+  <td class="ok">{{.Accepted}}</td>
+  <td class="bad">{{.Rejected}}</td>
+  <td class="warn">{{.Partial}}</td>
+  <td>
+    <span class="bar-bg"><span class="bar-fill" style="width:{{pct .AcceptanceRate}};background:{{if ge .AcceptanceRate 0.7}}#22c55e{{else if ge .AcceptanceRate 0.4}}#f59e0b{{else}}#ef4444{{end}}"></span></span>
+    <span style="font-size:0.78rem;color:#94a3b8;margin-left:4px">{{pct .AcceptanceRate}}</span>
+  </td>
+</tr>
+{{else}}<tr><td colspan="7" style="color:#64748b;text-align:center;padding:1.5rem">No outcomes reported yet — POST to /router/outcomes</td></tr>
 {{end}}
 </tbody>
 </table>

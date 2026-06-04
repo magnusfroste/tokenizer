@@ -14,6 +14,7 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/health"
 	"github.com/magnusfroste/tokenizer/internal/middleware"
+	"github.com/magnusfroste/tokenizer/internal/outcomes"
 	"github.com/magnusfroste/tokenizer/internal/policy"
 	"github.com/magnusfroste/tokenizer/internal/provider"
 	"github.com/magnusfroste/tokenizer/internal/spend"
@@ -37,6 +38,9 @@ type Config struct {
 	SpendTracker    *spend.Tracker
 	EventQueue      *eventlog.Queue
 	RegistryVersion string // shown on dashboard
+
+	// Feedback (Sprint 07). Optional.
+	OutcomeStore *outcomes.Store
 }
 
 func New(cfg Config) http.Handler {
@@ -69,12 +73,19 @@ func New(cfg Config) http.Handler {
 		mux.Handle("POST /router/decision", auth.Middleware(cfg.KeyStore)(decision))
 	}
 
+	// Outcome feedback API (ISSUE-039).
+	if cfg.OutcomeStore != nil {
+		outcome := OutcomeHandler(OutcomeOptions{Store: cfg.OutcomeStore, Logger: cfg.Logger})
+		mux.Handle("POST /router/outcomes", auth.Middleware(cfg.KeyStore)(outcome))
+	}
+
 	// Dashboard (no auth — read-only aggregated stats).
 	htmlH, dataH := DashboardHandler(DashboardOptions{
-		Spend:   cfg.SpendTracker,
-		Health:  cfg.HealthTracker,
-		Logger:  cfg.Logger,
-		Version: cfg.RegistryVersion,
+		Spend:    cfg.SpendTracker,
+		Health:   cfg.HealthTracker,
+		Outcomes: cfg.OutcomeStore,
+		Logger:   cfg.Logger,
+		Version:  cfg.RegistryVersion,
 	})
 	mux.HandleFunc("GET /router/dashboard", htmlH)
 	mux.HandleFunc("GET /router/dashboard/data", dataH)

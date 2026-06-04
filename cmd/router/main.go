@@ -15,6 +15,7 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/health"
+	"github.com/magnusfroste/tokenizer/internal/outcomes"
 	"github.com/magnusfroste/tokenizer/internal/provider"
 	"github.com/magnusfroste/tokenizer/internal/registry"
 	"github.com/magnusfroste/tokenizer/internal/server"
@@ -68,6 +69,7 @@ func main() {
 	// Observability: health tracker, spend tracker, event queue.
 	healthTracker := health.New()
 	spendTracker := spend.New()
+	outcomeStore := outcomes.NewStore()
 	eventQueue := eventlog.NewQueue(0)
 
 	// Build the fan-out event handler: logging + metrics + spend.
@@ -89,6 +91,7 @@ func main() {
 		SpendTracker:           spendTracker,
 		EventQueue:             eventQueue,
 		RegistryVersion:        snap.RegistryVersion(),
+		OutcomeStore:           outcomeStore,
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")
