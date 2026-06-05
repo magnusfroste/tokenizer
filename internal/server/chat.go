@@ -55,6 +55,7 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 	if len(opts) > 0 {
 		cfg = opts[0]
 	}
+	setMaskLogger(cfg.Logger)
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req openai.ChatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -423,6 +424,7 @@ func writeSSEData(w http.ResponseWriter, data []byte) {
 }
 
 func writeSSEError(w http.ResponseWriter, code, msg string) {
+	msg = maskOutbound("sse_error", code, msg)
 	body, _ := json.Marshal(openai.ErrorEnvelope{
 		Error: openai.ErrorBody{Message: msg, Type: code, Code: code},
 	})
@@ -577,6 +579,7 @@ func mapProviderError(err error) (status int, code string) {
 }
 
 func writeError(w http.ResponseWriter, status int, code, msg string) {
+	msg = maskOutbound("error_response", code, msg)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(openai.ErrorEnvelope{

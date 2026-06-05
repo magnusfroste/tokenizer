@@ -239,6 +239,43 @@ func TestChat_EmptyMessagesRejected(t *testing.T) {
 	}
 }
 
+func TestChat_ProviderErrorMasksSecretsBeforeReachingClient(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	secret := "postgres://app:topSecretPw99@db.internal:5432/app and Bearer sk-ant-AAAABBBBCCCCDDDDEEEE"
+	h := ChatCompletionsHandler(
+		&fakeAdapter{err: errors.New("upstream connect failed: " + secret)},
+		ChatOptions{Logger: logger},
+	)
+
+	rec := postChat(t, h, openai.ChatRequest{
+		Model:    "auto",
+		Messages: []openai.Message{{Role: "user", Content: "hello"}},
+	})
+
+	body := rec.Body.String()
+	for _, leaked := range []string{"topSecretPw99", "sk-ant-AAAABBBBCCCCDDDDEEEE"} {
+		if strings.Contains(body, leaked) {
+			t.Fatalf("secret leaked to client: response body still contains %q\nbody=%s", leaked, body)
+		}
+	}
+	if !strings.Contains(body, "[REDACTED:") {
+		t.Fatalf("expected a redaction marker in client error, got body=%s", body)
+	}
+
+	// A masking event must be logged, and it must not contain the secret either.
+	logs := logBuf.String()
+	if !strings.Contains(logs, "secret_masked") || !strings.Contains(logs, "masked_count") {
+		t.Fatalf("expected a secret_masked event to be logged, got logs=%s", logs)
+	}
+	for _, leaked := range []string{"topSecretPw99", "sk-ant-AAAABBBBCCCCDDDDEEEE"} {
+		if strings.Contains(logs, leaked) {
+			t.Fatalf("secret leaked into masking event log: %q present\nlogs=%s", leaked, logs)
+		}
+	}
+}
+
 func TestChat_StreamSendsSSEChunksInOrder(t *testing.T) {
 	adapter := &fakeStreamingAdapter{
 		streamChunks: []provider.StreamChunk{

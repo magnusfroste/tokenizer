@@ -196,145 +196,145 @@
       "id": "ISSUE-025",
       "title": "Implementera candidate filtering",
       "source": "05-issues/ISSUE-025-implementera-candidate-filtering.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-026",
       "title": "Implementera scoringfunktion v1",
       "source": "05-issues/ISSUE-026-implementera-scoringfunktion-v1.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-027",
       "title": "Implementera fallback planning",
       "source": "05-issues/ISSUE-027-implementera-fallback-planning.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-028",
       "title": "Implementera /router/decision dry-run",
       "source": "05-issues/ISSUE-028-implementera-router-decision-dry-run.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-029",
       "title": "Implementera provider timeout och retry",
       "source": "05-issues/ISSUE-029-implementera-provider-timeout-och-retry.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-030",
       "title": "Implementera fallback före first token",
       "source": "05-issues/ISSUE-030-implementera-fallback-f-re-first-token.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-031",
       "title": "Skapa request_logs och route_attempts",
       "source": "05-issues/ISSUE-031-skapa-request-logs-och-route-attempts.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-032",
       "title": "Implementera async event queue",
       "source": "05-issues/ISSUE-032-implementera-async-event-queue.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-033",
       "title": "Implementera metrics för routing och latency",
       "source": "05-issues/ISSUE-033-implementera-metrics-f-r-routing-och-latency.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-034",
       "title": "Implementera minimal spend aggregation",
       "source": "05-issues/ISSUE-034-implementera-minimal-spend-aggregation.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-035",
       "title": "Skapa minimal dashboard",
       "source": "05-issues/ISSUE-035-skapa-minimal-dashboard.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-036",
       "title": "Implementera provider health worker",
       "source": "05-issues/ISSUE-036-implementera-provider-health-worker.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-037",
       "title": "Skapa eval dataset v1",
       "source": "05-issues/ISSUE-037-skapa-eval-dataset-v1.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P1",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-038",
       "title": "Implementera eval runner",
       "source": "05-issues/ISSUE-038-implementera-eval-runner.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P1",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-039",
       "title": "Implementera outcome API",
       "source": "05-issues/ISSUE-039-implementera-outcome-api.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P1",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-040",
       "title": "Implementera acceptance feedback i dashboard",
       "source": "05-issues/ISSUE-040-implementera-acceptance-feedback-i-dashboard.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P1",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-041",
       "title": "Skapa regression suite för felrouting",
       "source": "05-issues/ISSUE-041-skapa-regression-suite-f-r-felrouting.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P1",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-042",
       "title": "Implementera secret masking v1",
       "source": "05-issues/ISSUE-042-implementera-secret-masking-v1.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P1",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-05T18:06:18+02:00"
     },
     {
       "id": "ISSUE-043",
