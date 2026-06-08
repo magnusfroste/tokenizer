@@ -340,9 +340,9 @@
       "id": "ISSUE-043",
       "title": "Implementera provider allow/deny per projekt",
       "source": "05-issues/ISSUE-043-implementera-provider-allow-deny-per-projekt.md",
-      "status": "ready",
+      "status": "done",
       "priority": "P1",
-      "updated_at": "2026-05-19T21:44:52+02:00"
+      "updated_at": "2026-06-08T22:02:36+02:00"
     },
     {
       "id": "ISSUE-044",

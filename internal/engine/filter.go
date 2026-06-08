@@ -74,17 +74,8 @@ func hardFilter(
 
 	// Policy constraints.
 	if c := route.Constraints; c != nil {
-		if len(c.AllowedProviders) > 0 && !containsStr(c.AllowedProviders, model.ProviderID) {
-			return fmt.Sprintf("provider %s not in allowed_providers", model.ProviderID)
-		}
-		if containsStr(c.DeniedProviders, model.ProviderID) {
-			return fmt.Sprintf("provider %s in denied_providers", model.ProviderID)
-		}
-		if len(c.AllowedModels) > 0 && !containsStr(c.AllowedModels, model.ID) {
-			return fmt.Sprintf("model %s not in allowed_models", model.ID)
-		}
-		if containsStr(c.DeniedModels, model.ID) {
-			return fmt.Sprintf("model %s in denied_models", model.ID)
+		if reason := providerModelConstraintReason(model, c); reason != "" {
+			return reason
 		}
 		if c.MaxLatencyMS != nil && model.Latency.P95FirstTokenMS > 0 && model.Latency.P95FirstTokenMS > *c.MaxLatencyMS {
 			return fmt.Sprintf("p95 latency %dms exceeds policy max %dms", model.Latency.P95FirstTokenMS, *c.MaxLatencyMS)
@@ -221,6 +212,30 @@ func mergeCapabilities(a, b registry.Capabilities) registry.Capabilities {
 		Vision:      a.Vision || b.Vision,
 		LongContext: a.LongContext || b.LongContext,
 	}
+}
+
+// providerModelConstraintReason returns a non-empty exclusion reason if the
+// model violates the policy's provider/model allow or deny lists. It is the
+// single source of truth for these checks, shared by candidate filtering and by
+// pinned-model decisions (explicit client model, policy force.model, disabled
+// mode) — so no override path can ever bypass a project's denylist or allowlist.
+func providerModelConstraintReason(model registry.Model, c *policy.Constraints) string {
+	if c == nil {
+		return ""
+	}
+	if len(c.AllowedProviders) > 0 && !containsStr(c.AllowedProviders, model.ProviderID) {
+		return fmt.Sprintf("provider %s not in allowed_providers", model.ProviderID)
+	}
+	if containsStr(c.DeniedProviders, model.ProviderID) {
+		return fmt.Sprintf("provider %s in denied_providers", model.ProviderID)
+	}
+	if len(c.AllowedModels) > 0 && !containsStr(c.AllowedModels, model.ID) {
+		return fmt.Sprintf("model %s not in allowed_models", model.ID)
+	}
+	if containsStr(c.DeniedModels, model.ID) {
+		return fmt.Sprintf("model %s in denied_models", model.ID)
+	}
+	return ""
 }
 
 func containsStr(slice []string, value string) bool {

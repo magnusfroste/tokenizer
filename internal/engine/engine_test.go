@@ -326,6 +326,96 @@ func TestDecide_ExplicitModelPinned(t *testing.T) {
 	}
 }
 
+// policyWithRoute compiles a match-all policy carrying the given route so tests
+// can exercise constraints through the full Decide path.
+func policyWithRoute(t *testing.T, route policy.Route) *policy.CompiledPolicy {
+	t.Helper()
+	store := makeStore(t)
+	p := &policy.Policy{
+		Version: "test-constraints",
+		Rules:   []policy.Rule{{ID: "all", When: policy.When{Empty: true}, Route: route}},
+	}
+	return mustCompilePolicy(t, p, store)
+}
+
+func explicitJob(model string) *router.JobDescriptor {
+	job := simpleJob(router.TaskSimpleChat, router.RiskLow)
+	job.ExplicitModel = &model
+	return job
+}
+
+func assertBlocked(t *testing.T, dec engine.RouteDecision, err error) {
+	t.Helper()
+	if !errors.Is(err, engine.ErrBlocked) {
+		t.Fatalf("expected ErrBlocked, got err=%v decision=%+v", err, dec)
+	}
+	if !dec.Blocked || dec.BlockStatus != 403 {
+		t.Fatalf("expected blocked 403 decision, got %+v", dec)
+	}
+	if dec.SelectedModel != "" {
+		t.Fatalf("blocked decision must not select a model, got %q", dec.SelectedModel)
+	}
+}
+
+// An explicit client model on the project denylist must be blocked — an override
+// can never bypass a denylist.
+func TestDecide_ExplicitModelDeniedByModelList(t *testing.T) {
+	eng := makeEngine(t)
+	pol := policyWithRoute(t, policy.Route{Constraints: &policy.Constraints{DeniedModels: []string{"cheap-general"}}})
+	dec, err := eng.Decide(explicitJob("cheap-general"), pol, engine.FullyHealthy, false)
+	assertBlocked(t, dec, err)
+}
+
+// An explicit client model whose provider is denied must be blocked.
+func TestDecide_ExplicitModelDeniedByProviderList(t *testing.T) {
+	eng := makeEngine(t)
+	pol := policyWithRoute(t, policy.Route{Constraints: &policy.Constraints{DeniedProviders: []string{"openai"}}})
+	dec, err := eng.Decide(explicitJob("cheap-general"), pol, engine.FullyHealthy, false) // cheap-general is an openai model
+	assertBlocked(t, dec, err)
+}
+
+// An explicit client model outside the allowlist must be blocked.
+func TestDecide_ExplicitModelNotInAllowlist(t *testing.T) {
+	eng := makeEngine(t)
+	pol := policyWithRoute(t, policy.Route{Constraints: &policy.Constraints{AllowedModels: []string{"premium-reasoning"}}})
+	dec, err := eng.Decide(explicitJob("cheap-general"), pol, engine.FullyHealthy, false)
+	assertBlocked(t, dec, err)
+}
+
+// An explicit client model that satisfies the allowlist is honored.
+func TestDecide_ExplicitModelAllowedPassesThrough(t *testing.T) {
+	eng := makeEngine(t)
+	pol := policyWithRoute(t, policy.Route{Constraints: &policy.Constraints{AllowedModels: []string{"premium-reasoning"}}})
+	dec, err := eng.Decide(explicitJob("premium-reasoning"), pol, engine.FullyHealthy, false)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if dec.Blocked || dec.SelectedModel != "premium-reasoning" {
+		t.Fatalf("expected premium-reasoning honored, got %+v", dec)
+	}
+}
+
+// router_mode=disabled must not become a way to bypass a denylist.
+func TestDecide_DisabledModeDeniedModelBlocked(t *testing.T) {
+	eng := makeEngine(t)
+	pol := policyWithRoute(t, policy.Route{Constraints: &policy.Constraints{DeniedModels: []string{"cheap-general"}}})
+	job := explicitJob("cheap-general")
+	job.RouterMode = router.RouterModeDisabled
+	dec, err := eng.Decide(job, pol, engine.FullyHealthy, false)
+	assertBlocked(t, dec, err)
+}
+
+// Even a policy force.model cannot select a denied model — deny is the floor.
+func TestDecide_ForceModelCannotBypassDeny(t *testing.T) {
+	eng := makeEngine(t)
+	pol := policyWithRoute(t, policy.Route{
+		Force:       &policy.Force{Model: "cheap-general"},
+		Constraints: &policy.Constraints{DeniedModels: []string{"cheap-general"}},
+	})
+	dec, err := eng.Decide(simpleJob(router.TaskSimpleChat, router.RiskLow), pol, engine.FullyHealthy, false)
+	assertBlocked(t, dec, err)
+}
+
 func TestDecide_DisabledModeWithoutExplicitModel(t *testing.T) {
 	eng := makeEngine(t)
 	job := simpleJob(router.TaskSimpleChat, router.RiskLow)

@@ -53,7 +53,7 @@ func (e *Engine) Decide(
 
 	// RouterMode=disabled skips routing entirely.
 	if job.RouterMode == router.RouterModeDisabled {
-		return decideDisabled(job, pol)
+		return decideDisabled(job, pol, snap)
 	}
 
 	// Evaluate compiled policy.
@@ -118,11 +118,31 @@ func (e *Engine) Decide(
 	}, nil
 }
 
-func decideDisabled(job *router.JobDescriptor, pol *policy.CompiledPolicy) (RouteDecision, error) {
+func decideDisabled(job *router.JobDescriptor, pol *policy.CompiledPolicy, snap *registry.Snapshot) (RouteDecision, error) {
 	if job.ExplicitModel == nil {
 		return RouteDecision{}, fmt.Errorf("%w: router_mode=disabled requires an explicit model field", ErrDisabled)
 	}
 	eval := evaluatePolicy(pol, job)
+
+	// Disabled mode uses the client model as-is, but the project's allow/deny
+	// lists still apply — disabling routing must not become a way to bypass a
+	// denylist. Resolve the model when known (to check its provider); otherwise
+	// enforce the model-name lists against the raw reference.
+	pinned := registry.Model{ID: *job.ExplicitModel, ProviderModelID: *job.ExplicitModel}
+	if m, ok := snap.Model(*job.ExplicitModel); ok {
+		pinned = m
+	}
+	if reason := providerModelConstraintReason(pinned, eval.Route.Constraints); reason != "" {
+		return RouteDecision{
+			Blocked:         true,
+			BlockCode:       "provider_not_allowed",
+			BlockReason:     fmt.Sprintf("router_mode=disabled model %q rejected: %s", *job.ExplicitModel, reason),
+			BlockStatus:     403,
+			DecisionReasons: append(eval.Explanations, fmt.Sprintf("router_mode=disabled model %q blocked: %s", *job.ExplicitModel, reason)),
+			PolicyVersion:   eval.PolicyVersion,
+		}, ErrBlocked
+	}
+
 	return RouteDecision{
 		RouteID:         routeID(job, *job.ExplicitModel),
 		SelectedModel:   *job.ExplicitModel,
@@ -148,6 +168,22 @@ func decidePinned(
 		}
 		model = *found
 	}
+
+	// A pinned model (explicit client model, policy force.model, or disabled
+	// mode) must still satisfy the project's provider/model allow and deny
+	// lists. An override can never bypass a denylist — deny is the security
+	// floor, so a violating pin is blocked rather than honored.
+	if reason := providerModelConstraintReason(model, eval.Route.Constraints); reason != "" {
+		return RouteDecision{
+			Blocked:         true,
+			BlockCode:       "provider_not_allowed",
+			BlockReason:     fmt.Sprintf("%s %q rejected: %s", source, modelRef, reason),
+			BlockStatus:     403,
+			DecisionReasons: append(eval.Explanations, fmt.Sprintf("%s %q blocked: %s", source, modelRef, reason)),
+			PolicyVersion:   eval.PolicyVersion,
+		}, ErrBlocked
+	}
+
 	return RouteDecision{
 		RouteID:          routeID(job, model.ID),
 		SelectedModel:    model.ID,
