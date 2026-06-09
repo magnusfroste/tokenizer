@@ -43,6 +43,7 @@ func main() {
 			ID:      "tn_local",
 			Project: "prj_local",
 			KeyID:   "key_local",
+			Scopes:  auth.AllScopes(),
 		})
 		logger.Info("seeded local api key", "tenant", "tn_local")
 	}

@@ -6,7 +6,7 @@
 - `type: security`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,11 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (klar 2026-06-09)
+
+- **Scopes definieras**: konstanter i `internal/auth` — `chat:completions`, `router:decision`, `router:outcomes` (matchar `api_keys.scopes` i schema/seed) samt wildcard `tenant.ScopeWildcard` (`*`). `tenant.Tenant` har nu ett `Scopes`-fält och en `HasScope`-metod (tom mängd = obegränsad legacy-nyckel; `*` = allt).
+- **Endpoints kräver rätt scope**: ny `auth.RequireScope`-middleware som körs efter `auth.Middleware` och returnerar `403 insufficient_scope` (OpenAI-feltkuvert) vid saknad scope. Wirad i `server.New`: `/v1/chat/completions` → `chat:completions`, `/router/decision` → `router:decision`, `/router/outcomes` → `router:outcomes`. Saknad scope loggas strukturerat.
+- Lokal nyckel (`cmd/router/main.go` + `db/seeds/local.sql`) provisioneras med alla tre scopes.
+- **Tester**: `internal/tenant` (HasScope-matris, nil-säkerhet), `internal/auth` (middleware tillåter/nekar, obegränsad nyckel, saknad tenant), `internal/server` (end-to-end 403 på chat-endpoint för scope-begränsad nyckel).
+- Enforcement sker i auth-lagret före routing → ingen påverkan på fast-path-latency.

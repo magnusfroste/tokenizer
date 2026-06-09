@@ -73,7 +73,8 @@ func New(cfg Config) http.Handler {
 		Auditor:                cfg.Auditor,
 		Retention:              cfg.Retention,
 	})
-	mux.Handle("POST /v1/chat/completions", auth.Middleware(cfg.KeyStore)(chat))
+	mux.Handle("POST /v1/chat/completions",
+		auth.Middleware(cfg.KeyStore)(auth.RequireScope(auth.ScopeChatCompletions)(chat)))
 
 	if cfg.Engine != nil {
 		decision := DecisionHandler(DecisionOptions{
@@ -81,13 +82,15 @@ func New(cfg Config) http.Handler {
 			PolicyCache: cfg.PolicyCache,
 			Logger:      cfg.Logger,
 		})
-		mux.Handle("POST /router/decision", auth.Middleware(cfg.KeyStore)(decision))
+		mux.Handle("POST /router/decision",
+			auth.Middleware(cfg.KeyStore)(auth.RequireScope(auth.ScopeRouterDecision)(decision)))
 	}
 
 	// Outcome feedback API (ISSUE-039).
 	if cfg.OutcomeStore != nil {
 		outcome := OutcomeHandler(OutcomeOptions{Store: cfg.OutcomeStore, Logger: cfg.Logger})
-		mux.Handle("POST /router/outcomes", auth.Middleware(cfg.KeyStore)(outcome))
+		mux.Handle("POST /router/outcomes",
+			auth.Middleware(cfg.KeyStore)(auth.RequireScope(auth.ScopeRouterOutcomes)(outcome)))
 	}
 
 	// Dashboard (no auth — read-only aggregated stats).
