@@ -1,5 +1,9 @@
 # Release checklist
 
+> För **beta-lansering** gäller den mer omfattande `beta-release-checklist.md`
+> (security, latency, fallback + sign-off-process). Denna lista gäller löpande
+> releaser efter beta.
+
 ## Före release
 
 - Unit tests passerar.
