@@ -18,6 +18,7 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/outcomes"
 	"github.com/magnusfroste/tokenizer/internal/policy"
 	"github.com/magnusfroste/tokenizer/internal/provider"
+	"github.com/magnusfroste/tokenizer/internal/retention"
 	"github.com/magnusfroste/tokenizer/internal/spend"
 )
 
@@ -46,6 +47,9 @@ type Config struct {
 	// Security (Sprint 08). Optional audit trail for blocked requests and
 	// control-plane changes (ISSUE-044).
 	Auditor audit.Sink
+
+	// Retention/privacy settings (ISSUE-045). Optional; gates prompt logging.
+	Retention *retention.Settings
 }
 
 func New(cfg Config) http.Handler {
@@ -67,6 +71,7 @@ func New(cfg Config) http.Handler {
 		HealthTracker:          cfg.HealthTracker,
 		EventQueue:             cfg.EventQueue,
 		Auditor:                cfg.Auditor,
+		Retention:              cfg.Retention,
 	})
 	mux.Handle("POST /v1/chat/completions", auth.Middleware(cfg.KeyStore)(chat))
 

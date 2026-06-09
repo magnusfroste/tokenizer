@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/outcomes"
 	"github.com/magnusfroste/tokenizer/internal/provider"
 	"github.com/magnusfroste/tokenizer/internal/registry"
+	"github.com/magnusfroste/tokenizer/internal/retention"
 	"github.com/magnusfroste/tokenizer/internal/server"
 	"github.com/magnusfroste/tokenizer/internal/spend"
 	"github.com/magnusfroste/tokenizer/internal/tenant"
@@ -87,6 +89,13 @@ func main() {
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	go eventQueue.Run(workerCtx, combinedHandler, logger)
 
+	// Retention/privacy settings (ISSUE-045). Prompt logging is off unless
+	// ROUTER_PROMPT_LOGGING is explicitly enabled.
+	retentionSettings := retention.NewSettings(
+		parseIntEnv(os.Getenv("ROUTER_RETENTION_DAYS"), retention.DefaultRetentionDays),
+		parseBoolEnv(os.Getenv("ROUTER_PROMPT_LOGGING")),
+	)
+
 	handler := server.New(server.Config{
 		Logger:                 logger,
 		KeyStore:               keyStore,
@@ -100,6 +109,7 @@ func main() {
 		RegistryVersion:        snap.RegistryVersion(),
 		OutcomeStore:           outcomeStore,
 		Auditor:                auditSink,
+		Retention:              retentionSettings,
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")
@@ -153,4 +163,11 @@ func parseBoolEnv(s string) bool {
 	default:
 		return false
 	}
+}
+
+func parseIntEnv(s string, fallback int) int {
+	if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && v > 0 {
+		return v
+	}
+	return fallback
 }
