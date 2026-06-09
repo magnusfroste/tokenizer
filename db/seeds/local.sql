@@ -21,7 +21,7 @@ VALUES (
   'project_local',
   'sha256:4670779d9e85bc75c5dd151ae15395c4a2221068d8ef4250cb967110e6629850',
   'Local development API key',
-  ARRAY['chat:completions'],
+  ARRAY['chat:completions', 'router:decision', 'router:outcomes'],
   'active'
 )
 ON CONFLICT (id) DO UPDATE SET
