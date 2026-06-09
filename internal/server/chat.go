@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
@@ -40,6 +42,9 @@ type ChatOptions struct {
 	// Observability (Sprint 06). All optional.
 	EventQueue    *eventlog.Queue
 	HealthTracker *health.Tracker
+
+	// Security audit trail (ISSUE-044). Optional; records blocked requests.
+	Auditor audit.Sink
 }
 
 // streamCandidate is one entry in the ordered streaming attempt list.
@@ -119,6 +124,7 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 					if status == 0 {
 						status = http.StatusForbidden
 					}
+					cfg.auditBlocked(r.Context(), job, dec)
 					writeError(w, status, dec.BlockCode, dec.BlockReason)
 					return
 				}
@@ -515,6 +521,34 @@ func (o *ChatOptions) enqueueDecision(job *router.JobDescriptor, dec engine.Rout
 		DecidedAt:             time.Now(),
 	}
 	o.EventQueue.Enqueue(eventlog.Event{Type: eventlog.EventTypeDecision, Decision: d})
+}
+
+// auditBlocked records a security-audit entry when policy blocks a request
+// before any provider call (ISSUE-044). No-op when no auditor is configured.
+func (o *ChatOptions) auditBlocked(ctx context.Context, job *router.JobDescriptor, dec engine.RouteDecision) {
+	if o.Auditor == nil {
+		return
+	}
+	detail := map[string]string{
+		"block_code": dec.BlockCode,
+		"task_type":  string(job.TaskType),
+		"risk_level": string(job.RiskLevel),
+	}
+	target := ""
+	if job.ExplicitModel != nil {
+		target = *job.ExplicitModel
+	}
+	audit.Record(ctx, o.Auditor, audit.Entry{
+		Action:    audit.ActionRequestBlocked,
+		Actor:     job.TenantID,
+		TenantID:  job.TenantID,
+		ProjectID: job.ProjectID,
+		Target:    target,
+		Outcome:   audit.OutcomeBlocked,
+		RequestID: job.RequestID,
+		Reason:    dec.BlockReason,
+		Detail:    detail,
+	})
 }
 
 // recordAttempt updates the health tracker and enqueues an AttemptEvent.

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/auth"
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
@@ -28,7 +29,13 @@ func main() {
 		Level: parseLogLevel(os.Getenv("LOG_LEVEL")),
 	}))
 
+	// Security audit trail (ISSUE-044): structured logs plus an in-memory ring
+	// buffer for in-process retrieval. Wired into the key store before any keys
+	// are added so seed mutations are captured too.
+	auditSink := audit.MultiSink(&audit.LogSink{Logger: logger}, audit.NewMemorySink(0))
+
 	keyStore := auth.NewInMemoryKeyStore()
+	keyStore.SetAuditor(auditSink)
 	if k := strings.TrimSpace(os.Getenv("LOCAL_API_KEY")); k != "" {
 		keyStore.Add(k, &tenant.Tenant{
 			ID:      "tn_local",
@@ -92,6 +99,7 @@ func main() {
 		EventQueue:             eventQueue,
 		RegistryVersion:        snap.RegistryVersion(),
 		OutcomeStore:           outcomeStore,
+		Auditor:                auditSink,
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")

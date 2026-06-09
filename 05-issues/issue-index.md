@@ -17,6 +17,13 @@ Redo för agent:
 - ISSUE-025 till ISSUE-060.
 - ISSUE-063 — Policy-gated context pipeline activation.
 
+Klart i sprint 05–08 (kod- och test-evidens):
+
+- ISSUE-025 till ISSUE-041 — Routing/scoring/fallback (S05), observability (S06), evals/feedback (S07).
+- ISSUE-042 — Secret masking v1.
+- ISSUE-043 — Provider allow/deny per projekt.
+- ISSUE-044 — Audit log (`internal/audit`: policy-reload, API-key-ändringar, blockerade requests).
+
 Inga issues är markerade `needs-triage`, `needs-info`, `ready-for-human` eller `wontfix` efter denna pass.
 
 ## Spec detail pass 2026-05-19
