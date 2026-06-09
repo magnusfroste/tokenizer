@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/openai"
 	"github.com/magnusfroste/tokenizer/internal/tenant"
 )
@@ -20,19 +22,67 @@ type KeyStore interface {
 }
 
 type InMemoryKeyStore struct {
-	mu   sync.RWMutex
-	keys map[string]*tenant.Tenant
+	mu      sync.RWMutex
+	keys    map[string]*tenant.Tenant
+	auditor audit.Sink // optional; audits key mutations
 }
 
 func NewInMemoryKeyStore() *InMemoryKeyStore {
 	return &InMemoryKeyStore{keys: make(map[string]*tenant.Tenant)}
 }
 
+// SetAuditor attaches an audit sink so subsequent key mutations are recorded.
+// Passing nil disables auditing. Safe to call once at startup.
+func (s *InMemoryKeyStore) SetAuditor(sink audit.Sink) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.auditor = sink
+}
+
 // Add stores the SHA-256 of the plaintext key. The plaintext is discarded.
 func (s *InMemoryKeyStore) Add(plaintext string, t *tenant.Tenant) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.keys[hashKey(plaintext)] = t
+	auditor := s.auditor
+	s.mu.Unlock()
+
+	if t != nil {
+		audit.Record(context.Background(), auditor, audit.Entry{
+			Action:    audit.ActionAPIKeyAdd,
+			Actor:     "system",
+			TenantID:  t.ID,
+			ProjectID: t.Project,
+			Target:    t.KeyID,
+		})
+	}
+}
+
+// Disable removes the key matching plaintext and records an audit entry. It
+// returns true if a key was present and removed.
+func (s *InMemoryKeyStore) Disable(plaintext string) bool {
+	hashed := hashKey(plaintext)
+	s.mu.Lock()
+	t, ok := s.keys[hashed]
+	if ok {
+		delete(s.keys, hashed)
+	}
+	auditor := s.auditor
+	s.mu.Unlock()
+
+	if !ok {
+		return false
+	}
+	entry := audit.Entry{
+		Action: audit.ActionAPIKeyDisable,
+		Actor:  "system",
+	}
+	if t != nil {
+		entry.TenantID = t.ID
+		entry.ProjectID = t.Project
+		entry.Target = t.KeyID
+	}
+	audit.Record(context.Background(), auditor, entry)
+	return true
 }
 
 func (s *InMemoryKeyStore) Lookup(hashed string) (*tenant.Tenant, bool) {

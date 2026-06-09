@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/registry"
 )
 
@@ -197,7 +199,17 @@ func (r compiledRule) explanations() []string {
 
 // Cache is an atomic tenant/project map of compiled policy snapshots.
 type Cache struct {
-	active atomic.Value // map[Scope]*CompiledPolicy
+	active  atomic.Value // map[Scope]*CompiledPolicy
+	auditor audit.Sink   // optional; audits (re)loads
+}
+
+// SetAuditor attaches an audit sink so subsequent reloads are recorded. Passing
+// nil disables auditing. Safe to call once at startup before serving traffic.
+func (c *Cache) SetAuditor(sink audit.Sink) {
+	if c == nil {
+		return
+	}
+	c.auditor = sink
 }
 
 func NewCache(sources []Source) (*Cache, error) {
@@ -236,9 +248,26 @@ func (c *Cache) Reload(sources []Source) error {
 	}
 	compiled, err := compileSources(sources)
 	if err != nil {
+		// A rejected reload is itself a security-relevant change attempt.
+		audit.Record(context.Background(), c.auditor, audit.Entry{
+			Action:  audit.ActionPolicyReload,
+			Actor:   "system",
+			Outcome: audit.OutcomeFailure,
+			Reason:  err.Error(),
+		})
 		return err
 	}
 	c.active.Store(compiled)
+	for scope, p := range compiled {
+		audit.Record(context.Background(), c.auditor, audit.Entry{
+			Action:    audit.ActionPolicyReload,
+			Actor:     "system",
+			TenantID:  scope.TenantID,
+			ProjectID: scope.ProjectID,
+			Target:    p.Version(),
+			Detail:    map[string]string{"registry_version": p.RegistryVersion()},
+		})
+	}
 	return nil
 }
 

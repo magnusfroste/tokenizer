@@ -8,6 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/auth"
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
 	"github.com/magnusfroste/tokenizer/internal/engine"
@@ -41,6 +42,10 @@ type Config struct {
 
 	// Feedback (Sprint 07). Optional.
 	OutcomeStore *outcomes.Store
+
+	// Security (Sprint 08). Optional audit trail for blocked requests and
+	// control-plane changes (ISSUE-044).
+	Auditor audit.Sink
 }
 
 func New(cfg Config) http.Handler {
@@ -61,6 +66,7 @@ func New(cfg Config) http.Handler {
 		PolicyCache:            cfg.PolicyCache,
 		HealthTracker:          cfg.HealthTracker,
 		EventQueue:             cfg.EventQueue,
+		Auditor:                cfg.Auditor,
 	})
 	mux.Handle("POST /v1/chat/completions", auth.Middleware(cfg.KeyStore)(chat))
 
