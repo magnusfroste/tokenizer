@@ -23,6 +23,7 @@ Klart i sprint 05–08 (kod- och test-evidens):
 - ISSUE-042 — Secret masking v1.
 - ISSUE-043 — Provider allow/deny per projekt.
 - ISSUE-044 — Audit log (`internal/audit`: policy-reload, API-key-ändringar, blockerade requests).
+- ISSUE-045 — Retention settings (`internal/retention`: per-tenant retention, prompt-logging-switch, cleanup-sweeper i `cmd/worker`).
 
 Inga issues är markerade `needs-triage`, `needs-info`, `ready-for-human` eller `wontfix` efter denna pass.
 

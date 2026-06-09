@@ -19,7 +19,9 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/openai"
 	"github.com/magnusfroste/tokenizer/internal/policy"
 	"github.com/magnusfroste/tokenizer/internal/provider"
+	"github.com/magnusfroste/tokenizer/internal/retention"
 	"github.com/magnusfroste/tokenizer/internal/router"
+	"github.com/magnusfroste/tokenizer/internal/secrets"
 	"github.com/magnusfroste/tokenizer/internal/tenant"
 )
 
@@ -45,6 +47,9 @@ type ChatOptions struct {
 
 	// Security audit trail (ISSUE-044). Optional; records blocked requests.
 	Auditor audit.Sink
+
+	// Retention/privacy settings (ISSUE-045). Optional; gates prompt logging.
+	Retention *retention.Settings
 }
 
 // streamCandidate is one entry in the ordered streaming attempt list.
@@ -86,6 +91,9 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 			Headers:   r.Header,
 			Request:   &req,
 		})
+
+		// Optional prompt logging — off by default, gated per tenant (ISSUE-045).
+		cfg.logPrompt(r.Context(), job, &req)
 
 		// Context pipeline (optional).
 		if cfg.ContextPipelineEnabled {
@@ -521,6 +529,29 @@ func (o *ChatOptions) enqueueDecision(job *router.JobDescriptor, dec engine.Rout
 		DecidedAt:             time.Now(),
 	}
 	o.EventQueue.Enqueue(eventlog.Event{Type: eventlog.EventTypeDecision, Decision: d})
+}
+
+// logPrompt logs prompt message content when retention settings enable prompt
+// logging for the tenant (ISSUE-045). It is a no-op by default. Content is run
+// through secret masking first so credentials never reach the logs, and it is
+// emitted at debug level so normal operation stays quiet.
+func (o *ChatOptions) logPrompt(ctx context.Context, job *router.JobDescriptor, req *openai.ChatRequest) {
+	if o.Retention == nil || !o.Retention.PromptLoggingEnabled(job.TenantID) {
+		return
+	}
+	logger := o.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	for i, m := range req.Messages {
+		logger.DebugContext(ctx, "prompt_message",
+			"request_id", job.RequestID,
+			"tenant_id", job.TenantID,
+			"index", i,
+			"role", m.Role,
+			"content", secrets.Mask(m.Content).Text,
+		)
+	}
 }
 
 // auditBlocked records a security-audit entry when policy blocks a request
