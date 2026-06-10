@@ -1,4 +1,4 @@
-.PHONY: build dev test test-unit test-integration test-eval test-policy test-regression lint fmt vet tidy clean run run-mock migrate seed
+.PHONY: build dev test test-unit test-integration test-eval test-policy test-regression eval-report lint fmt vet tidy clean run run-mock migrate seed
 
 GO ?= go
 PSQL ?= psql
@@ -47,6 +47,9 @@ test-policy:
 
 test-regression:
 	$(GO) test ./internal/evals/... -count=1 -run TestRegressionSuite -v
+
+eval-report:
+	$(GO) run ./cmd/eval-report -out eval-report
 
 lint: vet
 	@out=$$(gofmt -l . | grep -v '^vendor/' || true); \

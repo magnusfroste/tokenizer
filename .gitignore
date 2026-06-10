@@ -1,5 +1,6 @@
 /bin/
 /dist/
+/eval-report/
 *.test
 *.out
 .env
