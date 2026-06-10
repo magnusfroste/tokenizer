@@ -28,6 +28,7 @@ Klart i sprint 05–08 (kod- och test-evidens):
 - ISSUE-056 — Beta release checklist (`07-operations/beta-release-checklist.md` med sign-off-process).
 - ISSUE-047 — CLI för decision debug (`cmd/routerctl`).
 - ISSUE-048 — SDK metadata helpers (`internal/sdk` + `examples/sdk-metadata`).
+- ISSUE-049 — Spend simulator (`spend.Simulator`: baseline premium, besparing, riskjusterad besparing).
 
 Inga issues är markerade `needs-triage`, `needs-info`, `ready-for-human` eller `wontfix` efter denna pass.
 
