@@ -26,6 +26,7 @@ Klart i sprint 05–08 (kod- och test-evidens):
 - ISSUE-045 — Retention settings (`internal/retention`: per-tenant retention, prompt-logging-switch, cleanup-sweeper i `cmd/worker`).
 - ISSUE-046 — API key scopes (`auth.RequireScope` per endpoint + `tenant.Tenant.HasScope`).
 - ISSUE-056 — Beta release checklist (`07-operations/beta-release-checklist.md` med sign-off-process).
+- ISSUE-047 — CLI för decision debug (`cmd/routerctl`).
 
 Inga issues är markerade `needs-triage`, `needs-info`, `ready-for-human` eller `wontfix` efter denna pass.
 

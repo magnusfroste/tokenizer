@@ -6,7 +6,7 @@
 - `type: backend`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,17 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (klar 2026-06-09)
+
+- Ny CLI `cmd/routerctl` som postar en dry-run till `/router/decision` och
+  skriver ut **selected model**, provider, policy-version, timeout, fallback-kedja
+  och **explanations** (`decision_reasons`). `-explain` sätter `X-Router-Explain`.
+- Flaggor: `-url`, `-key` (env `ROUTER_API_KEY`/`LOCAL_API_KEY`), `-model`,
+  `-message`, `-explain`, `-stream`, `-timeout`.
+- Klientlogiken (`fetchDecision`) är extraherad och testad mot `httptest`:
+  lyckat beslut, policy-block (non-200 men giltigt beslut, inte fel),
+  auth-fel (401) och `insufficient_scope` (403) som fel, samt rendering.
+- Klienten avkodar bara den delmängd av `engine.RouteDecision`-kontraktet den
+  renderar — illustrerar client-side contract decoding.
+- Tillagd i `make build` (`bin/routerctl`).
