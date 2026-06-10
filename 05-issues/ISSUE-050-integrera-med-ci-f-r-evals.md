@@ -6,7 +6,7 @@
 - `type: infra`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,16 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (klar 2026-06-10)
+
+- **Eval smoke i CI**: nytt steg `make test-eval` i `.github/workflows/ci.yml`.
+- **Policyändringar testas**: nytt steg `make test-policy` (golden-cases).
+- **Rapport-artifact**: nytt `cmd/eval-report` kör datasetet via eval-runnern och
+  skriver `report.json` + `report.txt` (`evals.FormatReport`). CI-steget
+  `make eval-report` genererar dem och `actions/upload-artifact@v4` laddar upp
+  `eval-report/` (med `if: always()` + `if-no-files-found: error`).
+- `cmd/eval-report` har flaggor `-dataset`, `-out`, `-min-pass` (kan agera gate).
+  `eval-report/` är gitignorad.
+- Tester: `generate` kör datasetet (≥50 fall), `writeReport` producerar giltig
+  JSON + icke-tom text, fel vid saknat dataset.
