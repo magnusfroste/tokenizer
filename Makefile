@@ -7,11 +7,13 @@ BIN_DIR := bin
 ROUTER_BIN := $(BIN_DIR)/router
 MOCK_BIN := $(BIN_DIR)/mock-provider
 WORKER_BIN := $(BIN_DIR)/worker
+CTL_BIN := $(BIN_DIR)/routerctl
 
 build:
 	$(GO) build -o $(ROUTER_BIN) ./cmd/router
 	$(GO) build -o $(MOCK_BIN) ./cmd/mock-provider
 	$(GO) build -o $(WORKER_BIN) ./cmd/worker
+	$(GO) build -o $(CTL_BIN) ./cmd/routerctl
 
 run: build
 	$(ROUTER_BIN)
