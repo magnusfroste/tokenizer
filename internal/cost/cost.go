@@ -156,3 +156,9 @@ func formatMicroUSD(micros int64) string {
 	fraction := micros % 1000000
 	return fmt.Sprintf("%d.%06d", whole, fraction)
 }
+
+// FormatMicroUSD renders a micro-USD amount as a fixed-point USD string with six
+// decimal places (e.g. 1500000 → "1.500000").
+func FormatMicroUSD(micros int64) string {
+	return formatMicroUSD(micros)
+}
