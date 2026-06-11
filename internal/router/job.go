@@ -92,13 +92,20 @@ type JobDescriptorInput struct {
 }
 
 type JobDescriptor struct {
-	RequestID               string
-	TenantID                string
-	ProjectID               string
-	TenantIDHint            string
-	ProjectIDHint           string
-	TaskType                TaskType
-	TaskTypeHint            TaskType
+	RequestID     string
+	TenantID      string
+	ProjectID     string
+	TenantIDHint  string
+	ProjectIDHint string
+	TaskType      TaskType
+	TaskTypeHint  TaskType
+	// TaskConfidence is the classifier's confidence in TaskType, in [0,1].
+	// Used by the engine's conservative mode to treat low-confidence
+	// classifications more cautiously.
+	TaskConfidence float64
+	// Conservative marks this request for cautious routing (set by the engine
+	// when global conservative mode is on and the classification is uncertain).
+	Conservative            bool
 	RiskLevel               RiskLevel
 	RiskLevelHint           RiskLevel
 	Sensitivity             Sensitivity
@@ -155,6 +162,7 @@ func NewJobDescriptor(input JobDescriptorInput) *JobDescriptor {
 	job.Keywords = append([]string(nil), features.Keywords...)
 	job.SensitivityHint = sensitivityFromFeatureHints(features.SensitivityHints)
 	task := classifier.ClassifyTask(features, req.Messages)
+	job.TaskConfidence = task.Confidence
 	if taskType, ok := parseTaskType(task.TaskType); ok {
 		job.TaskType = taskType
 	}

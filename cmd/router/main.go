@@ -71,6 +71,12 @@ func main() {
 		os.Exit(1)
 	}
 	eng := engine.New(store)
+	// Global conservative mode (ISSUE-060): incident lever that routes uncertain
+	// classifications at a raised minimum tier. See 07-operations/runbook.md.
+	if parseBoolEnv(os.Getenv("ROUTER_CONSERVATIVE_MODE")) {
+		eng.SetConservative(true)
+		logger.Info("global conservative mode enabled")
+	}
 
 	// In local dev the mock adapter serves all providers.
 	adapters := map[string]provider.Adapter{

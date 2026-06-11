@@ -3,11 +3,16 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/magnusfroste/tokenizer/internal/policy"
 	"github.com/magnusfroste/tokenizer/internal/registry"
 	"github.com/magnusfroste/tokenizer/internal/router"
 )
+
+// conservativeConfidenceThreshold is the task-classification confidence below
+// which conservative mode treats a request as uncertain (ISSUE-060).
+const conservativeConfidenceThreshold = 0.5
 
 var (
 	ErrNoRoute  = errors.New("engine: no route found")
@@ -20,6 +25,10 @@ var (
 type Engine struct {
 	Registry *registry.Store
 	Weights  Weights
+	// conservative is a global safety lever (ISSUE-060). When set, uncertain
+	// (low-confidence) classifications are routed at a raised minimum tier so an
+	// incident never silently downgrades ambiguous traffic to cheap models.
+	conservative atomic.Bool
 }
 
 // New creates an Engine backed by the given registry store, using default weights.
@@ -28,6 +37,26 @@ func New(store *registry.Store) *Engine {
 		Registry: store,
 		Weights:  DefaultWeights(),
 	}
+}
+
+// SetConservative toggles global conservative mode at runtime (e.g. during an
+// incident). Safe for concurrent use.
+func (e *Engine) SetConservative(on bool) { e.conservative.Store(on) }
+
+// Conservative reports whether global conservative mode is on.
+func (e *Engine) Conservative() bool { return e.conservative.Load() }
+
+// conservativeForJob reports whether this request should be routed cautiously:
+// conservative mode is on and the task classification is uncertain (unknown or
+// below the confidence threshold).
+func (e *Engine) conservativeForJob(job *router.JobDescriptor) bool {
+	if !e.Conservative() {
+		return false
+	}
+	if job.TaskType == router.TaskUnknownHighRisk {
+		return true
+	}
+	return job.TaskConfidence > 0 && job.TaskConfidence < conservativeConfidenceThreshold
 }
 
 // Decide computes a RouteDecision for the given job.
@@ -55,6 +84,10 @@ func (e *Engine) Decide(
 	if job.RouterMode == router.RouterModeDisabled {
 		return decideDisabled(job, pol, snap)
 	}
+
+	// Conservative mode (ISSUE-060): mark uncertain requests for cautious
+	// routing before filtering/scoring read the flag off the job.
+	job.Conservative = e.conservativeForJob(job)
 
 	// Evaluate compiled policy.
 	eval := evaluatePolicy(pol, job)
@@ -94,7 +127,7 @@ func (e *Engine) Decide(
 	}
 
 	// Score and rank.
-	minTier := MinimumTierForTask(job.TaskType, job.RiskLevel, eval.Route)
+	minTier := MinimumTierForTask(job, eval.Route)
 	scored := ScoreCandidates(filterRes.Candidates, job, minTier, health, e.Weights)
 	primary := scored[0].Model
 

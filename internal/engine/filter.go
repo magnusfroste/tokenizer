@@ -38,7 +38,7 @@ func FilterCandidates(
 	merged := mergeCapabilities(required, policyCaps)
 
 	candidates := snapshot.EnabledModelsWithCapabilities(merged)
-	minTier := MinimumTierForTask(job.TaskType, job.RiskLevel, route)
+	minTier := MinimumTierForTask(job, route)
 
 	for _, model := range candidates {
 		if reason := hardFilter(model, job, route, health, minTier); reason != "" {
@@ -125,9 +125,20 @@ func hardFilter(
 	return ""
 }
 
-// MinimumTierForTask returns the lowest acceptable model tier for the task/risk
-// combination after applying any policy profile force.
-func MinimumTierForTask(task router.TaskType, risk router.RiskLevel, route policy.Route) registry.Tier {
+// MinimumTierForTask returns the lowest acceptable model tier for the job after
+// applying any policy profile force and, when the job is flagged conservative,
+// a raised floor (ISSUE-060).
+func MinimumTierForTask(job *router.JobDescriptor, route policy.Route) registry.Tier {
+	base := baseMinimumTier(job.TaskType, job.RiskLevel, route)
+	if job.Conservative {
+		// Conservative mode never lowers the safety level: uncertain requests
+		// route at least at balanced (policy/task forces above this still win).
+		return higherTier(base, registry.TierBalanced)
+	}
+	return base
+}
+
+func baseMinimumTier(task router.TaskType, risk router.RiskLevel, route policy.Route) registry.Tier {
 	if f := route.Force; f != nil && f.ModelProfile != "" {
 		switch f.ModelProfile {
 		case policy.ProfilePremium:
@@ -149,6 +160,14 @@ func MinimumTierForTask(task router.TaskType, risk router.RiskLevel, route polic
 		}
 		return registry.TierCheap
 	}
+}
+
+// higherTier returns the more capable of two tiers.
+func higherTier(a, b registry.Tier) registry.Tier {
+	if TierOrdinal(b) > TierOrdinal(a) {
+		return b
+	}
+	return a
 }
 
 // TierAtLeast reports whether tier meets or exceeds minimum.

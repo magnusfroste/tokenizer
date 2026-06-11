@@ -130,7 +130,7 @@ func TestFilterCandidates_RouterModeCheapExcludesPremium(t *testing.T) {
 func TestScoreCandidates_SortedDescending(t *testing.T) {
 	snap, _ := registry.DefaultSnapshot()
 	job := simpleJob(router.TaskHardCodeDebugging, router.RiskMedium)
-	minTier := engine.MinimumTierForTask(job.TaskType, job.RiskLevel, policy.Route{})
+	minTier := engine.MinimumTierForTask(job, policy.Route{})
 	candidates := snap.EnabledModelsWithCapabilities(registry.Capabilities{Chat: true})
 	scored := engine.ScoreCandidates(candidates, job, minTier, engine.FullyHealthy, engine.DefaultWeights())
 	for i := 1; i < len(scored); i++ {
@@ -143,7 +143,7 @@ func TestScoreCandidates_SortedDescending(t *testing.T) {
 func TestScoreCandidates_HighRiskPrefersPremium(t *testing.T) {
 	snap, _ := registry.DefaultSnapshot()
 	job := simpleJob(router.TaskUnknownHighRisk, router.RiskHigh)
-	minTier := engine.MinimumTierForTask(job.TaskType, job.RiskLevel, policy.Route{})
+	minTier := engine.MinimumTierForTask(job, policy.Route{})
 	candidates := snap.EnabledModelsWithCapabilities(registry.Capabilities{Chat: true})
 	scored := engine.ScoreCandidates(candidates, job, minTier, engine.FullyHealthy, engine.DefaultWeights())
 	if len(scored) == 0 {
@@ -159,7 +159,7 @@ func TestScoreCandidates_RouterModeCheapPrefersCheap(t *testing.T) {
 	snap, _ := registry.DefaultSnapshot()
 	job := simpleJob(router.TaskSummarization, router.RiskLow)
 	job.RouterMode = router.RouterModeCheap
-	minTier := engine.MinimumTierForTask(job.TaskType, job.RiskLevel, policy.Route{})
+	minTier := engine.MinimumTierForTask(job, policy.Route{})
 	candidates := snap.EnabledModelsWithCapabilities(registry.Capabilities{Chat: true})
 	scored := engine.ScoreCandidates(candidates, job, minTier, engine.FullyHealthy, engine.DefaultWeights())
 	if len(scored) == 0 {
@@ -175,7 +175,7 @@ func TestScoreCandidates_UnhealthyProviderScoresLower(t *testing.T) {
 	job := simpleJob(router.TaskSimpleChat, router.RiskLow)
 	// Make anthropic (premium-reasoning) unhealthy.
 	health := engine.StaticHealth{"anthropic": 0.2}
-	minTier := engine.MinimumTierForTask(job.TaskType, job.RiskLevel, policy.Route{})
+	minTier := engine.MinimumTierForTask(job, policy.Route{})
 	candidates := snap.EnabledModelsWithCapabilities(registry.Capabilities{Chat: true})
 	scored := engine.ScoreCandidates(candidates, job, minTier, health, engine.DefaultWeights())
 	for i, sc := range scored {
@@ -193,7 +193,7 @@ func TestScoreCandidates_UnhealthyProviderScoresLower(t *testing.T) {
 func TestBuildFallbackChain_MaxTwoFallbacks(t *testing.T) {
 	snap, _ := registry.DefaultSnapshot()
 	job := simpleJob(router.TaskSimpleChat, router.RiskLow)
-	minTier := engine.MinimumTierForTask(job.TaskType, job.RiskLevel, policy.Route{})
+	minTier := engine.MinimumTierForTask(job, policy.Route{})
 	candidates := snap.EnabledModelsWithCapabilities(registry.Capabilities{Chat: true})
 	scored := engine.ScoreCandidates(candidates, job, minTier, engine.FullyHealthy, engine.DefaultWeights())
 	if len(scored) == 0 {
@@ -209,7 +209,7 @@ func TestBuildFallbackChain_MaxTwoFallbacks(t *testing.T) {
 func TestBuildFallbackChain_HighRiskNoDowngrade(t *testing.T) {
 	snap, _ := registry.DefaultSnapshot()
 	job := simpleJob(router.TaskUnknownHighRisk, router.RiskHigh)
-	minTier := engine.MinimumTierForTask(job.TaskType, job.RiskLevel, policy.Route{})
+	minTier := engine.MinimumTierForTask(job, policy.Route{})
 	candidates := snap.EnabledModelsWithCapabilities(registry.Capabilities{Chat: true})
 	scored := engine.ScoreCandidates(candidates, job, minTier, engine.FullyHealthy, engine.DefaultWeights())
 	if len(scored) == 0 {
@@ -232,7 +232,7 @@ func TestBuildFallbackChain_HighRiskNoDowngrade(t *testing.T) {
 func TestBuildFallbackChain_PrimaryNotInFallbacks(t *testing.T) {
 	snap, _ := registry.DefaultSnapshot()
 	job := simpleJob(router.TaskSimpleChat, router.RiskLow)
-	minTier := engine.MinimumTierForTask(job.TaskType, job.RiskLevel, policy.Route{})
+	minTier := engine.MinimumTierForTask(job, policy.Route{})
 	candidates := snap.EnabledModelsWithCapabilities(registry.Capabilities{Chat: true})
 	scored := engine.ScoreCandidates(candidates, job, minTier, engine.FullyHealthy, engine.DefaultWeights())
 	if len(scored) == 0 {
