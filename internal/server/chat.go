@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/magnusfroste/tokenizer/internal/audit"
+	"github.com/magnusfroste/tokenizer/internal/budget"
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
@@ -50,6 +51,9 @@ type ChatOptions struct {
 
 	// Retention/privacy settings (ISSUE-045). Optional; gates prompt logging.
 	Retention *retention.Settings
+
+	// Budget caps (ISSUE-051). Optional; blocks or downgrades over-budget scopes.
+	Budget *budget.Evaluator
 }
 
 // streamCandidate is one entry in the ordered streaming attempt list.
@@ -117,6 +121,11 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 
 		// Routing engine path.
 		if cfg.Engine != nil && len(cfg.Adapters) > 0 {
+			// Budget caps (ISSUE-051): block or downgrade before routing.
+			if !cfg.applyBudget(w, r, job) {
+				return
+			}
+
 			pol := lookupPolicy(cfg.PolicyCache, job)
 			routeStart := time.Now()
 			health := cfg.healthSnapshot()
@@ -552,6 +561,41 @@ func (o *ChatOptions) logPrompt(ctx context.Context, job *router.JobDescriptor, 
 			"content", secrets.Mask(m.Content).Text,
 		)
 	}
+}
+
+// applyBudget evaluates budget caps for the request's scope (ISSUE-051). It
+// returns false when the request has been rejected (response already written),
+// true to continue. A warning sets a header; a downgrade forces cheap routing.
+func (o *ChatOptions) applyBudget(w http.ResponseWriter, r *http.Request, job *router.JobDescriptor) bool {
+	if o.Budget == nil {
+		return true
+	}
+	v := o.Budget.Check(job.TenantID, job.ProjectID)
+	logger := o.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	switch {
+	case v.Blocked():
+		logger.WarnContext(r.Context(), "budget_block",
+			"request_id", job.RequestID, "scope", v.Scope,
+			"spent_micro_usd", v.SpentMicroUSD, "limit_micro_usd", v.LimitMicroUSD)
+		writeError(w, http.StatusPaymentRequired, "budget_exceeded",
+			"budget cap exceeded for "+v.Scope)
+		return false
+	case v.Downgrade():
+		job.RouterMode = router.RouterModeCheap
+		w.Header().Set("X-Router-Budget-Action", "downgrade")
+		logger.WarnContext(r.Context(), "budget_downgrade",
+			"request_id", job.RequestID, "scope", v.Scope,
+			"spent_micro_usd", v.SpentMicroUSD, "limit_micro_usd", v.LimitMicroUSD)
+	case v.Status == budget.StatusWarn:
+		w.Header().Set("X-Router-Budget-Warning", "true")
+		logger.InfoContext(r.Context(), "budget_warning",
+			"request_id", job.RequestID, "scope", v.Scope,
+			"fraction", v.Fraction, "limit_micro_usd", v.LimitMicroUSD)
+	}
+	return true
 }
 
 // auditBlocked records a security-audit entry when policy blocks a request

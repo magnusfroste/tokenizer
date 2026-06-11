@@ -10,6 +10,7 @@ import (
 
 	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/auth"
+	"github.com/magnusfroste/tokenizer/internal/budget"
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
@@ -50,6 +51,9 @@ type Config struct {
 
 	// Retention/privacy settings (ISSUE-045). Optional; gates prompt logging.
 	Retention *retention.Settings
+
+	// Budget caps (ISSUE-051). Optional; blocks or downgrades over-budget scopes.
+	Budget *budget.Evaluator
 }
 
 func New(cfg Config) http.Handler {
@@ -72,6 +76,7 @@ func New(cfg Config) http.Handler {
 		EventQueue:             cfg.EventQueue,
 		Auditor:                cfg.Auditor,
 		Retention:              cfg.Retention,
+		Budget:                 cfg.Budget,
 	})
 	mux.Handle("POST /v1/chat/completions",
 		auth.Middleware(cfg.KeyStore)(auth.RequireScope(auth.ScopeChatCompletions)(chat)))

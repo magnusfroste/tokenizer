@@ -14,6 +14,7 @@ import (
 
 	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/auth"
+	"github.com/magnusfroste/tokenizer/internal/budget"
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/health"
@@ -82,9 +83,22 @@ func main() {
 	outcomeStore := outcomes.NewStore()
 	eventQueue := eventlog.NewQueue(0)
 
-	// Build the fan-out event handler: logging + metrics + spend.
+	// Budget caps (ISSUE-051): a ledger accrues spend from the event queue and an
+	// evaluator checks it on the request path. Caps are opt-in; ROUTER_BUDGET_USD
+	// sets a default per-tenant cap for local dev.
+	budgetCaps := budget.NewCaps()
+	budgetLedger := budget.NewLedger()
+	if usd := parseIntEnv(os.Getenv("ROUTER_BUDGET_USD"), 0); usd > 0 {
+		budgetCaps.SetTenant("tn_local", budget.Cap{
+			LimitMicroUSD: int64(usd) * 1_000_000,
+			Action:        budget.ActionDowngrade,
+		})
+	}
+	budgetEvaluator := budget.NewEvaluator(budgetCaps, budgetLedger)
+
+	// Build the fan-out event handler: logging + metrics + spend + budget ledger.
 	loggingHandler := &eventlog.LoggingHandler{Logger: logger}
-	combinedHandler := eventlog.MultiHandler(loggingHandler, spendTracker)
+	combinedHandler := eventlog.MultiHandler(loggingHandler, spendTracker, budgetLedger)
 
 	// Start the queue worker in the background.
 	workerCtx, workerCancel := context.WithCancel(context.Background())
@@ -111,6 +125,7 @@ func main() {
 		OutcomeStore:           outcomeStore,
 		Auditor:                auditSink,
 		Retention:              retentionSettings,
+		Budget:                 budgetEvaluator,
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")
