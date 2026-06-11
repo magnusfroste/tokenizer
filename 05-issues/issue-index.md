@@ -30,6 +30,7 @@ Klart i sprint 05–08 (kod- och test-evidens):
 - ISSUE-048 — SDK metadata helpers (`internal/sdk` + `examples/sdk-metadata`).
 - ISSUE-049 — Spend simulator (`spend.Simulator`: baseline premium, besparing, riskjusterad besparing).
 - ISSUE-050 — CI-integration för evals (dedikerade eval/policy-steg + `cmd/eval-report` artifact).
+- ISSUE-051 — Budget caps (`internal/budget`: per tenant/projekt, warning, block/downgrade).
 
 Inga issues är markerade `needs-triage`, `needs-info`, `ready-for-human` eller `wontfix` efter denna pass.
 
