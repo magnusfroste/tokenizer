@@ -12,6 +12,7 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/auth"
 	"github.com/magnusfroste/tokenizer/internal/budget"
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
+	"github.com/magnusfroste/tokenizer/internal/decisioncache"
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/health"
@@ -54,6 +55,9 @@ type Config struct {
 
 	// Budget caps (ISSUE-051). Optional; blocks or downgrades over-budget scopes.
 	Budget *budget.Evaluator
+
+	// Route decision cache (ISSUE-052). Optional; caches low-risk decisions.
+	DecisionCache *decisioncache.Cache
 }
 
 func New(cfg Config) http.Handler {
@@ -77,6 +81,8 @@ func New(cfg Config) http.Handler {
 		Auditor:                cfg.Auditor,
 		Retention:              cfg.Retention,
 		Budget:                 cfg.Budget,
+		DecisionCache:          cfg.DecisionCache,
+		RegistryVersion:        cfg.RegistryVersion,
 	})
 	mux.Handle("POST /v1/chat/completions",
 		auth.Middleware(cfg.KeyStore)(auth.RequireScope(auth.ScopeChatCompletions)(chat)))

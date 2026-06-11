@@ -15,6 +15,7 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/auth"
 	"github.com/magnusfroste/tokenizer/internal/budget"
+	"github.com/magnusfroste/tokenizer/internal/decisioncache"
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/health"
@@ -96,6 +97,13 @@ func main() {
 	}
 	budgetEvaluator := budget.NewEvaluator(budgetCaps, budgetLedger)
 
+	// Route decision cache (ISSUE-052): low-risk decisions reused within a short
+	// TTL. Disabled when ROUTER_DECISION_CACHE_TTL_SECONDS is 0.
+	decisionCache := decisioncache.New(
+		time.Duration(parseIntEnv(os.Getenv("ROUTER_DECISION_CACHE_TTL_SECONDS"), 60))*time.Second,
+		0,
+	)
+
 	// Build the fan-out event handler: logging + metrics + spend + budget ledger.
 	loggingHandler := &eventlog.LoggingHandler{Logger: logger}
 	combinedHandler := eventlog.MultiHandler(loggingHandler, spendTracker, budgetLedger)
@@ -126,6 +134,7 @@ func main() {
 		Auditor:                auditSink,
 		Retention:              retentionSettings,
 		Budget:                 budgetEvaluator,
+		DecisionCache:          decisionCache,
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")

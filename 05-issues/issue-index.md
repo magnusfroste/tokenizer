@@ -31,6 +31,7 @@ Klart i sprint 05–08 (kod- och test-evidens):
 - ISSUE-049 — Spend simulator (`spend.Simulator`: baseline premium, besparing, riskjusterad besparing).
 - ISSUE-050 — CI-integration för evals (dedikerade eval/policy-steg + `cmd/eval-report` artifact).
 - ISSUE-051 — Budget caps (`internal/budget`: per tenant/projekt, warning, block/downgrade).
+- ISSUE-052 — Route decision cache (`internal/decisioncache`: versionerad nyckel, endast låg-risk).
 
 Inga issues är markerade `needs-triage`, `needs-info`, `ready-for-human` eller `wontfix` efter denna pass.
 

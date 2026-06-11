@@ -13,6 +13,7 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/budget"
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
+	"github.com/magnusfroste/tokenizer/internal/decisioncache"
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/health"
@@ -54,6 +55,11 @@ type ChatOptions struct {
 
 	// Budget caps (ISSUE-051). Optional; blocks or downgrades over-budget scopes.
 	Budget *budget.Evaluator
+
+	// Route decision cache (ISSUE-052). Optional; caches low-risk decisions.
+	// RegistryVersion versions cache keys alongside the policy version.
+	DecisionCache   *decisioncache.Cache
+	RegistryVersion string
 }
 
 // streamCandidate is one entry in the ordered streaming attempt list.
@@ -127,10 +133,36 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 			}
 
 			pol := lookupPolicy(cfg.PolicyCache, job)
+
+			// Route decision cache (ISSUE-052): low-risk requests may reuse a
+			// versioned, previously-computed decision instead of re-scoring.
+			var (
+				dec       engine.RouteDecision
+				decErr    error
+				cacheKey  string
+				cacheable = cfg.DecisionCache != nil && decisioncache.Cacheable(job)
+				cacheHit  bool
+			)
+			if cacheable {
+				cacheKey = decisioncache.Key(&req, job, policyVersion(pol), cfg.RegistryVersion)
+				if cached, ok := cfg.DecisionCache.Get(cacheKey); ok {
+					dec, cacheHit = cached, true
+				}
+			}
+
 			routeStart := time.Now()
-			health := cfg.healthSnapshot()
-			dec, decErr := cfg.Engine.Decide(job, pol, health, req.Stream)
+			if !cacheHit {
+				health := cfg.healthSnapshot()
+				dec, decErr = cfg.Engine.Decide(job, pol, health, req.Stream)
+			}
 			routingDur := time.Since(routeStart)
+
+			if cacheable && !cacheHit && decErr == nil && !dec.Blocked {
+				cfg.DecisionCache.Put(cacheKey, dec)
+			}
+			if cfg.DecisionCache != nil {
+				w.Header().Set("X-Router-Cache", cacheStatus(cacheable, cacheHit))
+			}
 
 			// Always enqueue a decision event (blocked or not).
 			cfg.enqueueDecision(job, dec, routingDur, decErr)
@@ -596,6 +628,27 @@ func (o *ChatOptions) applyBudget(w http.ResponseWriter, r *http.Request, job *r
 			"fraction", v.Fraction, "limit_micro_usd", v.LimitMicroUSD)
 	}
 	return true
+}
+
+// policyVersion returns the compiled policy's version, or "" when no policy
+// applies. It versions the decision cache key (ISSUE-052).
+func policyVersion(pol *policy.CompiledPolicy) string {
+	if pol == nil {
+		return ""
+	}
+	return pol.Version()
+}
+
+// cacheStatus renders the X-Router-Cache header value.
+func cacheStatus(cacheable, hit bool) string {
+	switch {
+	case !cacheable:
+		return "bypass"
+	case hit:
+		return "hit"
+	default:
+		return "miss"
+	}
 }
 
 // auditBlocked records a security-audit entry when policy blocks a request
