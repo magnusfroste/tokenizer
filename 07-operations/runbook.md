@@ -35,6 +35,19 @@
 4. Aktivera budget cap eller conservative downgrade för låg-risk tasks.
 5. Informera admin.
 
+## Missklassificering / osäker routing under incident
+
+Om classifiern routar osäkra (låg-confidence) eller okända tasks för billigt under
+en incident: aktivera **global conservative mode** (ISSUE-060).
+
+1. Sätt feature-flaggan `ROUTER_CONSERVATIVE_MODE=true` (eller anropa
+   `Engine.SetConservative(true)` i drift) för att höja golvet.
+2. Effekt: okända/låg-confidence klassificeringar routas till minst `balanced`
+   (policy- och task-forcing till `premium` gäller fortfarande — flaggan sänker
+   aldrig säkerhetsnivån).
+3. Verifiera via `/router/decision` att osäkra prompts nu väljer ≥ balanced.
+4. Stäng av flaggan när classifiern/incidenten är åtgärdad.
+
 ## Policy reload failure
 
 1. Kontrollera policy validator logs.
