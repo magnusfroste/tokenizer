@@ -3,7 +3,11 @@
 // but never propagated to the request path.
 package eventlog
 
-import "time"
+import (
+	"time"
+
+	"github.com/magnusfroste/tokenizer/internal/engine"
+)
 
 // EventType identifies the kind of event.
 type EventType string
@@ -41,6 +45,7 @@ type DecisionEvent struct {
 	RoutingDurationMicros int64
 	Blocked               bool
 	BlockCode             string
+	ShadowComparison      *engine.DecisionComparison
 	DecidedAt             time.Time
 }
 

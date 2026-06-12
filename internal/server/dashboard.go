@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/health"
 	"github.com/magnusfroste/tokenizer/internal/outcomes"
 	"github.com/magnusfroste/tokenizer/internal/spend"
@@ -15,24 +16,27 @@ import (
 
 // DashboardOptions configures the dashboard handler.
 type DashboardOptions struct {
-	Spend    *spend.Tracker
-	Health   *health.Tracker
-	Outcomes *outcomes.Store
-	Logger   *slog.Logger
-	Version  string // registry version label
+	Spend       *spend.Tracker
+	Health      *health.Tracker
+	Outcomes    *outcomes.Store
+	Comparisons *eventlog.ComparisonTracker
+	Logger      *slog.Logger
+	Version     string // registry version label
 }
 
 // DashboardData is the JSON payload returned by /router/dashboard/data.
 type DashboardData struct {
-	Version        string                   `json:"registry_version"`
-	TotalRequests  int64                    `json:"total_requests"`
-	TotalCostUSD   float64                  `json:"total_cost_usd"`
-	RoutesByModel  []spend.ModelRow         `json:"routes_by_model"`
-	SpendByTenant  []spend.TenantRow        `json:"spend_by_tenant"`
-	ProviderHealth map[string]float64       `json:"provider_health"`
-	Acceptance     []outcomes.AcceptanceRow `json:"acceptance"`
-	OutcomeCount   int                      `json:"outcome_count"`
-	TaskFilter     string                   `json:"task_filter,omitempty"`
+	Version        string                      `json:"registry_version"`
+	TotalRequests  int64                       `json:"total_requests"`
+	TotalCostUSD   float64                     `json:"total_cost_usd"`
+	RoutesByModel  []spend.ModelRow            `json:"routes_by_model"`
+	SpendByTenant  []spend.TenantRow           `json:"spend_by_tenant"`
+	ProviderHealth map[string]float64          `json:"provider_health"`
+	Acceptance     []outcomes.AcceptanceRow    `json:"acceptance"`
+	OutcomeCount   int                         `json:"outcome_count"`
+	ShadowSummary  eventlog.ComparisonSummary  `json:"shadow_summary"`
+	ShadowRecent   []eventlog.ComparisonRecord `json:"shadow_recent"`
+	TaskFilter     string                      `json:"task_filter,omitempty"`
 }
 
 // DashboardHandler returns the /router/dashboard HTML handler and
@@ -72,6 +76,10 @@ func buildDashboardData(opts DashboardOptions, taskFilter string) DashboardData 
 	if opts.Outcomes != nil {
 		d.OutcomeCount = opts.Outcomes.Count()
 		d.Acceptance = opts.Outcomes.Acceptance(taskFilter)
+	}
+	if opts.Comparisons != nil {
+		d.ShadowSummary = opts.Comparisons.Summary()
+		d.ShadowRecent = opts.Comparisons.Recent(taskFilter)
 	}
 	return d
 }
@@ -151,6 +159,16 @@ section{margin-bottom:2.5rem}
     <div class="card-value">{{len .SpendByTenant}}</div>
     <div class="card-sub">active</div>
   </div>
+  <div class="card">
+    <div class="card-label">Shadow comparisons</div>
+    <div class="card-value">{{.ShadowSummary.Total}}</div>
+    <div class="card-sub">{{.ShadowSummary.ChangedCount}} changed vs actual</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Shadow cost delta</div>
+    <div class="card-value">{{usd .ShadowSummary.EstimatedCostDeltaUSD}}</div>
+    <div class="card-sub">shadow minus actual</div>
+  </div>
 </div>
 
 <section>
@@ -190,6 +208,30 @@ section{margin-bottom:2.5rem}
   <td><span class="dot dot-{{healthClass $score}}"></span><span class="{{healthClass $score}}">{{if ge $score 0.9}}Healthy{{else if ge $score 0.5}}Degraded{{else}}Down{{end}}</span></td>
 </tr>
 {{else}}<tr><td colspan="3" style="color:#64748b;text-align:center;padding:1.5rem">No provider calls recorded yet</td></tr>
+{{end}}
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Shadow routing {{if .TaskFilter}}<span style="font-size:0.78rem;color:#64748b">· filtered: {{.TaskFilter}}</span>{{end}}</h2>
+<p style="font-size:0.78rem;color:#64748b;margin-bottom:0.6rem">
+  {{.ShadowSummary.ChangedCount}} / {{.ShadowSummary.Total}} comparisons changed · route {{.ShadowSummary.RouteChangedCount}} · fallback {{.ShadowSummary.FallbackChangedCount}} · timeout {{.ShadowSummary.TimeoutChangedCount}} · verifier {{.ShadowSummary.VerifierChangedCount}} · policy version {{.ShadowSummary.PolicyVersionChangedCount}} · cost {{.ShadowSummary.CostChangedCount}}
+</p>
+<table>
+<thead><tr><th>Request</th><th>Task</th><th>Actual</th><th>Shadow</th><th>Changed</th><th>Cost delta</th><th>Policy versions</th></tr></thead>
+<tbody>
+{{range .ShadowRecent}}
+<tr>
+  <td class="mono">{{.RequestID}}</td>
+  <td class="mono">{{.TaskType}}</td>
+  <td class="mono">{{.Comparison.Primary.SelectedProvider}}/{{.Comparison.Primary.SelectedModel}}</td>
+  <td class="mono">{{.Comparison.Secondary.SelectedProvider}}/{{.Comparison.Secondary.SelectedModel}}</td>
+  <td>{{if .Comparison.Changed}}yes{{else}}no{{end}}</td>
+  <td>{{usd .Comparison.EstimatedCostDeltaUSD}}</td>
+  <td class="mono">{{.Comparison.Primary.PolicyVersion}} → {{.Comparison.Secondary.PolicyVersion}}</td>
+</tr>
+{{else}}<tr><td colspan="7" style="color:#64748b;text-align:center;padding:1.5rem">No shadow comparisons recorded yet</td></tr>
 {{end}}
 </tbody>
 </table>

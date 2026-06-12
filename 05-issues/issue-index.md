@@ -33,6 +33,13 @@ Klart i sprint 05–08 (kod- och test-evidens):
 - ISSUE-051 — Budget caps (`internal/budget`: per tenant/projekt, warning, block/downgrade).
 - ISSUE-052 — Route decision cache (`internal/decisioncache`: versionerad nyckel, endast låg-risk).
 - ISSUE-060 — Global conservative mode (engine feature flag; osäkra tasks → ≥ balanced).
+- ISSUE-053 — Model-specific prompt adapter skeleton (`internal/provider`: disabled-by-default system-role prompt mutator).
+- ISSUE-054 — A/B policy simulation (`engine.DecisionComparison`, offline eval policy comparison, comparison artifacts).
+- ISSUE-055 — Shadow routing (opt-in shadow policy decision, eventlog comparison payload, dashboard diff).
+- ISSUE-057 — RBAC skeleton (`tenant.Role`, role middleware, admin-only dashboard).
+- ISSUE-058 — Trained lightweight classifier experiment (offline-only dataset/training/baseline comparison; no production rollout).
+- ISSUE-059 — Cost-quality frontier report (eval report frontier, deterministic recommendations).
+- ISSUE-063 — Policy-gated context pipeline activation (`route.force.context_pipeline`, runtime policy cache, server-side activation).
 
 Inga issues är markerade `needs-triage`, `needs-info`, `ready-for-human` eller `wontfix` efter denna pass.
 
@@ -69,7 +76,7 @@ P2:
 
 - ISSUE-061 — Rebrand `tokenix` → `tokenizer` (module path + product name). `type: refactor`, `state: done`, klar 2026-05-19.
 - ISSUE-062 — Context-processor pipeline (interface only). `type: design`, `state: done`, klar 2026-05-19. Designval landade i ADR-0013.
-- ISSUE-063 — Policy-gated context pipeline activation. `type: backend`, `state: ready-for-agent`. Tracks ADR-0013 tenant-policy opt-in before real processors ship.
+- ISSUE-063 — Policy-gated context pipeline activation. `type: backend`, `state: done`, klar 2026-06-12. Tracks ADR-0013 tenant-policy opt-in before real processors ship.
 
 ## Labelstandard
 

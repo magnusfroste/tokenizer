@@ -6,7 +6,7 @@
 - `type: backend`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,10 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (klar 2026-06-12)
+
+- Ny gemensam `engine.DecisionComparison` för deterministiska route/cost-diffar mellan två policybeslut.
+- `internal/evals` kan köra samma dataset mot två kompilerade policies offline, utan provideranrop, och rapportera stabila ändringar per case.
+- `cmd/eval-report` stöder `-policy-a`/`-policy-b` och skriver `comparison.json`/`comparison.txt`.
+- Fixtures i `evals/policy-sim-*.yaml` täcker tenant-specifik rerouting och experiment-blockering.

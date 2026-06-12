@@ -21,7 +21,7 @@ func (h *LoggingHandler) Handle(ctx context.Context, e Event) {
 	switch e.Type {
 	case EventTypeDecision:
 		if d := e.Decision; d != nil {
-			logger.InfoContext(ctx, "route_decision",
+			attrs := []any{
 				"request_id", d.RequestID,
 				"tenant_id", d.TenantID,
 				"task_type", d.TaskType,
@@ -32,7 +32,18 @@ func (h *LoggingHandler) Handle(ctx context.Context, e Event) {
 				"estimated_cost_usd", d.EstimatedCostUSD,
 				"routing_duration_ms", d.RoutingDurationMs,
 				"blocked", d.Blocked,
-			)
+			}
+			if d.ShadowComparison != nil {
+				attrs = append(attrs,
+					"shadow_changed", d.ShadowComparison.Changed,
+					"shadow_route_changed", d.ShadowComparison.RouteChanged,
+					"shadow_selected_model", d.ShadowComparison.Secondary.SelectedModel,
+					"shadow_selected_provider", d.ShadowComparison.Secondary.SelectedProvider,
+					"shadow_policy_version", d.ShadowComparison.Secondary.PolicyVersion,
+					"shadow_cost_delta_microusd", d.ShadowComparison.EstimatedCostDeltaMicroUSD,
+				)
+			}
+			logger.InfoContext(ctx, "route_decision", attrs...)
 			status := "success"
 			if d.Blocked {
 				status = "blocked"

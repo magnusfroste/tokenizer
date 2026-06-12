@@ -20,15 +20,18 @@ type Dataset struct {
 
 // Case is a single golden routing case.
 type Case struct {
-	ID            string        `yaml:"id"`
-	Name          string        `yaml:"name"`
-	TaskType      string        `yaml:"task_type"`
-	RiskLevel     string        `yaml:"risk_level"`
-	Prompt        string        `yaml:"prompt"`
-	RouterMode    string        `yaml:"router_mode,omitempty"`
-	ExplicitModel string        `yaml:"explicit_model,omitempty"`
-	ExpandTokens  int           `yaml:"expand_tokens,omitempty"`
-	ExpectedRoute ExpectedRoute `yaml:"expected_route"`
+	ID            string         `yaml:"id"`
+	Name          string         `yaml:"name"`
+	TaskType      string         `yaml:"task_type"`
+	RiskLevel     string         `yaml:"risk_level"`
+	Prompt        string         `yaml:"prompt"`
+	TenantID      string         `yaml:"tenant_id,omitempty"`
+	ProjectID     string         `yaml:"project_id,omitempty"`
+	Metadata      map[string]any `yaml:"metadata,omitempty"`
+	RouterMode    string         `yaml:"router_mode,omitempty"`
+	ExplicitModel string         `yaml:"explicit_model,omitempty"`
+	ExpandTokens  int            `yaml:"expand_tokens,omitempty"`
+	ExpectedRoute ExpectedRoute  `yaml:"expected_route"`
 }
 
 // ExpectedRoute is the expected routing outcome for a case.

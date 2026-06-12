@@ -6,7 +6,7 @@
 - `type: backend`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,11 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (klar 2026-06-12)
+
+- Chat-path har opt-in `ShadowPolicyCache` som beräknar alternativt policybeslut med samma engine/health-input men aldrig kör en extra provider-call.
+- `eventlog.DecisionEvent` bär `ShadowComparison`; structured logs och ny in-memory tracker aggregerar actual-vs-shadow-diffar.
+- `cmd/router` kan ladda shadow policy via `ROUTER_SHADOW_POLICY_PATH` och wirar comparison tracker i event fan-out.
+- Dashboard JSON/HTML visar shadow summary/recent-diffar och behåller admin-only RBAC-skydd.
+- Tester verifierar att primär provider kör exakt en gång och att shadow comparison sparas/exponeras.

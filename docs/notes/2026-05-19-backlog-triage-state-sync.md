@@ -8,6 +8,8 @@ The repo had a large canonical issue backlog in `05-issues/`, while `.ai/tasks.j
 
 Backlog readiness can drift when `.ai` is bootstrapped after the original issue set already exists. A local issue may look specified enough for execution, but `continue` and next-task selection still depend on canonical `.ai` state on `main`.
 
+On 2026-06-12, `.ai/state.json.next` still pointed at `ISSUE-044` even though issue files `ISSUE-044..052`, `ISSUE-056`, and `ISSUE-060` were already marked `state: done` with implementation closeouts. The fix was a reconciliation-only `.ai` update that marked those tasks done and advanced `next` to `ISSUE-063`.
+
 ## Reuse Rules
 
 - When triaging the whole backlog, update both `05-issues/` labels and `.ai/tasks.json` in the same pass.
@@ -19,6 +21,7 @@ Backlog readiness can drift when `.ai` is bootstrapped after the original issue 
 - Most issue files have no `state:` label.
 - `.ai/tasks.json` contains only recently created tasks while `05-issues/` has older implementation tickets.
 - `.ai/state.json.next` points to a later issue even though earlier P0 issues are still unimplemented.
+- `.ai/state.json.next` points to an issue whose file is already `state: done` with an implementation closeout.
 
 ## Next Checklist
 

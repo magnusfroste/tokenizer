@@ -531,6 +531,12 @@ func decodeForce(node *yaml.Node, ctx string) (*Force, error) {
 				return nil, err
 			}
 			f.Verifier = &b
+		case "context_pipeline":
+			b, err := decodeBool(val, ctx+".context_pipeline")
+			if err != nil {
+				return nil, err
+			}
+			f.ContextPipeline = &b
 		case "timeout_ms":
 			n, err := decodeInt(val, ctx+".timeout_ms")
 			if err != nil {

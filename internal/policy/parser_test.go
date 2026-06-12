@@ -109,6 +109,33 @@ func TestParseValidPolicy(t *testing.T) {
 	}
 }
 
+func TestParseForceContextPipeline(t *testing.T) {
+	src := `
+version: pv_context_pipeline
+settings:
+  default_model_profile: balanced
+  conservative_unknowns: true
+  max_router_overhead_ms: 100
+  default_timeout_ms: 30000
+  default_retention: standard
+rules:
+  - id: enable_context_pipeline
+    when:
+      tenant: tn_policy
+    route:
+      force:
+        context_pipeline: true
+`
+	p := mustParse(t, src)
+	if len(p.Rules) != 1 {
+		t.Fatalf("rules = %d, want 1", len(p.Rules))
+	}
+	force := p.Rules[0].Route.Force
+	if force == nil || force.ContextPipeline == nil || !*force.ContextPipeline {
+		t.Fatalf("context_pipeline not parsed into force: %+v", force)
+	}
+}
+
 func wantErr(t *testing.T, _ *Policy, err error, contains string) {
 	t.Helper()
 	if err == nil {

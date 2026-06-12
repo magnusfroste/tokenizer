@@ -509,6 +509,13 @@ func mergeForce(existing, next *Force, ruleID string) (*Force, []string) {
 			keepFirst("verifier")
 		}
 	}
+	if next.ContextPipeline != nil {
+		if out.ContextPipeline == nil {
+			out.ContextPipeline = cloneBoolPtr(next.ContextPipeline)
+		} else {
+			keepFirst("context_pipeline")
+		}
+	}
 	if next.TimeoutMS != nil {
 		if out.TimeoutMS == nil {
 			out.TimeoutMS = cloneIntPtr(next.TimeoutMS)
@@ -763,6 +770,7 @@ func cloneForce(in *Force) *Force {
 	}
 	out := *in
 	out.Verifier = cloneBoolPtr(in.Verifier)
+	out.ContextPipeline = cloneBoolPtr(in.ContextPipeline)
 	out.TimeoutMS = cloneIntPtr(in.TimeoutMS)
 	return &out
 }

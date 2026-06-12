@@ -48,9 +48,13 @@ func RequireScope(scope string) func(http.Handler) http.Handler {
 }
 
 func writeForbidden(w http.ResponseWriter, msg string) {
+	writeForbiddenCode(w, msg, "insufficient_scope")
+}
+
+func writeForbiddenCode(w http.ResponseWriter, msg, code string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
 	_ = json.NewEncoder(w).Encode(openai.ErrorEnvelope{
-		Error: openai.ErrorBody{Message: msg, Type: "forbidden", Code: "insufficient_scope"},
+		Error: openai.ErrorBody{Message: msg, Type: "forbidden", Code: code},
 	})
 }

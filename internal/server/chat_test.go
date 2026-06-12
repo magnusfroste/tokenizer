@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,11 +13,16 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
+	"github.com/magnusfroste/tokenizer/internal/engine"
+	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/middleware"
 	"github.com/magnusfroste/tokenizer/internal/openai"
+	"github.com/magnusfroste/tokenizer/internal/policy"
 	"github.com/magnusfroste/tokenizer/internal/provider"
+	"github.com/magnusfroste/tokenizer/internal/registry"
 	"github.com/magnusfroste/tokenizer/internal/router"
 	"github.com/magnusfroste/tokenizer/internal/tenant"
 )
@@ -25,11 +31,15 @@ type fakeAdapter struct {
 	resp          *openai.ChatResponse
 	err           error
 	completeCalls int
+	lastReq       *provider.NormalizedModelRequest
 }
 
 func (f *fakeAdapter) Name() string { return "fake" }
 func (f *fakeAdapter) Complete(ctx context.Context, req *provider.NormalizedModelRequest) (*openai.ChatResponse, error) {
 	f.completeCalls++
+	if req != nil {
+		f.lastReq = req.Clone()
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -109,7 +119,7 @@ func (p *chatTestProcessor) Process(ctx context.Context, req *provider.Normalize
 
 func TestChat_ContextPipelineNoopDoesNotWriteSavingsHeader(t *testing.T) {
 	processor := &chatTestProcessor{result: contextproc.Result{TokensSaved: 0}}
-	h := chatHandlerWithProcessor(processor)
+	h := chatHandlerWithProcessor(t, processor, true, enabledContextPipelinePolicy(t), &fakeAdapter{resp: testChatResponse()})
 
 	rec := postChat(t, h, openai.ChatRequest{
 		Model:    "auto",
@@ -129,7 +139,7 @@ func TestChat_ContextPipelineNoopDoesNotWriteSavingsHeader(t *testing.T) {
 
 func TestChat_ContextPipelineWritesSavingsHeader(t *testing.T) {
 	processor := &chatTestProcessor{result: contextproc.Result{TokensSaved: 12}}
-	h := chatHandlerWithProcessor(processor)
+	h := chatHandlerWithProcessor(t, processor, true, enabledContextPipelinePolicy(t), &fakeAdapter{resp: testChatResponse()})
 
 	rec := postChat(t, h, openai.ChatRequest{
 		Model:    "auto",
@@ -153,7 +163,8 @@ func TestChat_ContextPipelineReceivesRouterJobDescriptor(t *testing.T) {
 			Processors: []contextproc.Processor{processor},
 			Logger:     logger,
 		},
-		Logger: logger,
+		Logger:      logger,
+		PolicyCache: enabledContextPipelinePolicy(t),
 	})
 	h := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := tenant.WithTenant(r.Context(), &tenant.Tenant{ID: "tn_auth", Project: "prj_auth"})
@@ -217,16 +228,237 @@ func testChatResponse() *openai.ChatResponse {
 	}
 }
 
-func chatHandlerWithProcessor(processor contextproc.Processor) http.Handler {
+func chatHandlerWithProcessor(t *testing.T, processor contextproc.Processor, operatorEnabled bool, cache *policy.Cache, adapter provider.Adapter) http.Handler {
+	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return ChatCompletionsHandler(&fakeAdapter{resp: testChatResponse()}, ChatOptions{
-		ContextPipelineEnabled: true,
+	base := ChatCompletionsHandler(adapter, ChatOptions{
+		ContextPipelineEnabled: operatorEnabled,
 		ContextPipeline: &contextproc.Pipeline{
 			Processors: []contextproc.Processor{processor},
 			Logger:     logger,
 		},
-		Logger: logger,
+		Logger:      logger,
+		PolicyCache: cache,
 	})
+	return middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := tenant.WithTenant(r.Context(), &tenant.Tenant{ID: "tn_auth", Project: "prj_auth"})
+		base.ServeHTTP(w, r.WithContext(ctx))
+	}))
+}
+
+func enabledContextPipelinePolicy(t *testing.T) *policy.Cache {
+	t.Helper()
+	src := `
+version: pv_context_pipeline_enabled
+settings:
+  default_model_profile: balanced
+  conservative_unknowns: true
+  max_router_overhead_ms: 100
+  default_timeout_ms: 30000
+  default_retention: standard
+rules:
+  - id: enable_context_pipeline
+    when:
+      tenant: tn_auth
+      project: prj_auth
+    route:
+      force:
+        context_pipeline: true
+`
+	return policyCacheFromYAML(t, src)
+}
+
+func defaultRuntimePolicyCache(t *testing.T) *policy.Cache {
+	t.Helper()
+	snap, err := registry.DefaultSnapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	cache, err := policy.NewDefaultRuntimeCache(snap)
+	if err != nil {
+		t.Fatalf("NewDefaultRuntimeCache: %v", err)
+	}
+	return cache
+}
+
+func policyCacheFromYAML(t *testing.T, src string) *policy.Cache {
+	t.Helper()
+	snap, err := registry.DefaultSnapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	parsed, err := policy.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	cache, err := policy.NewCache([]policy.Source{{Scope: policy.Scope{}, Policy: parsed, Registry: snap}})
+	if err != nil {
+		t.Fatalf("NewCache: %v", err)
+	}
+	return cache
+}
+
+func TestChat_ContextPipelineDefaultsOffAndIgnoresClientEnableAttempts(t *testing.T) {
+	processor := &chatTestProcessor{result: contextproc.Result{TokensSaved: 7}}
+	base := chatHandlerWithProcessor(t, processor, true, defaultRuntimePolicyCache(t), &fakeAdapter{resp: testChatResponse()})
+	h := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := tenant.WithTenant(r.Context(), &tenant.Tenant{ID: "tn_auth", Project: "prj_auth"})
+		base.ServeHTTP(w, r.WithContext(ctx))
+	}))
+
+	reqBody := openai.ChatRequest{
+		Model:    "auto",
+		Messages: []openai.Message{{Role: "user", Content: "hello"}},
+		Metadata: map[string]any{
+			"context_pipeline": true,
+		},
+	}
+	buf, err := json.Marshal(reqBody)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Router-Context-Pipeline", "true")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if processor.called {
+		t.Fatal("context pipeline should stay off without policy enablement")
+	}
+	if got := rec.Header().Get("X-Router-Context-Savings"); got != "" {
+		t.Fatalf("expected no context savings header, got %q", got)
+	}
+}
+
+func TestChat_ContextPipelineOperatorKillSwitchOverridesPolicy(t *testing.T) {
+	processor := &chatTestProcessor{result: contextproc.Result{TokensSaved: 7}}
+	base := chatHandlerWithProcessor(t, processor, false, enabledContextPipelinePolicy(t), &fakeAdapter{resp: testChatResponse()})
+	h := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := tenant.WithTenant(r.Context(), &tenant.Tenant{ID: "tn_auth", Project: "prj_auth"})
+		base.ServeHTTP(w, r.WithContext(ctx))
+	}))
+
+	rec := postChat(t, h, openai.ChatRequest{
+		Model:    "auto",
+		Messages: []openai.Message{{Role: "user", Content: "hello"}},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if processor.called {
+		t.Fatal("operator kill switch should disable the context pipeline")
+	}
+}
+
+func TestChat_ContextPipelineSkippedForStreamingEvenWhenPolicyEnabled(t *testing.T) {
+	processor := &chatTestProcessor{result: contextproc.Result{TokensSaved: 9}}
+	streaming := &fakeStreamingAdapter{
+		streamChunks: []provider.StreamChunk{
+			{Data: []byte(`{"id":"chunk_1"}`)},
+			{Done: true},
+		},
+	}
+	base := chatHandlerWithProcessor(t, processor, true, enabledContextPipelinePolicy(t), streaming)
+	h := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := tenant.WithTenant(r.Context(), &tenant.Tenant{ID: "tn_auth", Project: "prj_auth"})
+		base.ServeHTTP(w, r.WithContext(ctx))
+	}))
+
+	rec := postChat(t, h, openai.ChatRequest{
+		Model:    "auto",
+		Messages: []openai.Message{{Role: "user", Content: "hello"}},
+		Stream:   true,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if processor.called {
+		t.Fatal("streaming requests should skip the context pipeline")
+	}
+	if got := rec.Header().Get("X-Router-Context-Savings"); got != "" {
+		t.Fatalf("expected no context savings header for streaming, got %q", got)
+	}
+}
+
+func TestChat_PromptAdapterDisabledByDefault(t *testing.T) {
+	adapter := &fakeAdapter{resp: testChatResponse()}
+	h := ChatCompletionsHandler(adapter, ChatOptions{
+		PromptAdapter: &provider.PromptAdapter{
+			Rules: []provider.PromptAdapterRule{{
+				Name: "auto-prefix",
+				Match: provider.PromptAdapterMatch{
+					ModelIDs: []string{"auto"},
+				},
+				Mutation: provider.SystemPromptMutation{Prefix: "[router] "},
+			}},
+		},
+	})
+
+	rec := postChat(t, h, openai.ChatRequest{
+		Model: "auto",
+		Messages: []openai.Message{
+			{Role: "system", Content: "baseline"},
+			{Role: "user", Content: "hello"},
+		},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if adapter.lastReq == nil {
+		t.Fatal("expected provider request capture")
+	}
+	if got := adapter.lastReq.Messages[0].Content; got != "baseline" {
+		t.Fatalf("expected system prompt unchanged, got %q", got)
+	}
+}
+
+func TestChat_PromptAdapterMutatesSystemPromptBeforeProvider(t *testing.T) {
+	adapter := &fakeAdapter{resp: testChatResponse()}
+	h := ChatCompletionsHandler(adapter, ChatOptions{
+		PromptAdapter: &provider.PromptAdapter{
+			Enabled: true,
+			Rules: []provider.PromptAdapterRule{{
+				Name: "auto-wrap",
+				Match: provider.PromptAdapterMatch{
+					ModelIDs: []string{"auto"},
+				},
+				Mutation: provider.SystemPromptMutation{
+					Prefix: "[router] ",
+					Suffix: " [adapter]",
+				},
+			}},
+		},
+	})
+
+	rec := postChat(t, h, openai.ChatRequest{
+		Model: "auto",
+		Messages: []openai.Message{
+			{Role: "system", Content: "baseline"},
+			{Role: "user", Content: "hello"},
+			{Role: "system", Content: "guardrails"},
+		},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if adapter.lastReq == nil {
+		t.Fatal("expected provider request capture")
+	}
+	if got := adapter.lastReq.Messages[0].Content; got != "[router] baseline" {
+		t.Fatalf("expected first system message mutated before provider call, got %q", got)
+	}
+	if got := adapter.lastReq.Messages[1].Content; got != "hello" {
+		t.Fatalf("expected user message unchanged, got %q", got)
+	}
+	if got := adapter.lastReq.Messages[2].Content; got != "guardrails [adapter]" {
+		t.Fatalf("expected last system message mutated before provider call, got %q", got)
+	}
 }
 
 func TestChat_EmptyMessagesRejected(t *testing.T) {
@@ -445,6 +677,79 @@ func TestChat_NonStreamingStillUsesCompletePath(t *testing.T) {
 	}
 }
 
+func TestChat_ShadowRoutingPersistsComparisonAndExecutesPrimaryOnce(t *testing.T) {
+	snap, err := registry.DefaultSnapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	store, err := registry.NewStore(snap)
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	primaryCache := mustForceModelPolicyCache(t, snap, "pv_shadow_primary", "tn_shadow", "balanced-coder")
+	shadowCache := mustForceModelPolicyCache(t, snap, "pv_shadow_secondary", "tn_shadow", "premium-reasoning")
+
+	tracker := eventlog.NewComparisonTracker(10)
+	queue := eventlog.NewQueue(4)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go queue.Run(ctx, tracker, nil)
+
+	adapter := &fakeStreamingAdapter{fakeAdapter: fakeAdapter{resp: testChatResponse()}}
+	base := ChatCompletionsHandler(adapter, ChatOptions{
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Engine:            engine.New(store),
+		Adapters:          map[string]provider.Adapter{"openai": adapter, "anthropic": adapter},
+		PolicyCache:       primaryCache,
+		ShadowPolicyCache: shadowCache,
+		EventQueue:        queue,
+	})
+	h := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := tenant.WithTenant(r.Context(), &tenant.Tenant{ID: "tn_shadow", Project: "prj_shadow"})
+		base.ServeHTTP(w, r.WithContext(ctx))
+	}))
+
+	rec := postChat(t, h, openai.ChatRequest{
+		Model:    "auto",
+		Messages: []openai.Message{{Role: "user", Content: "route this once"}},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("X-Router-Selected-Model"); got != "balanced-coder" {
+		t.Fatalf("selected model header = %q, want balanced-coder", got)
+	}
+	if adapter.completeCalls != 1 {
+		t.Fatalf("expected primary adapter Complete once, got %d", adapter.completeCalls)
+	}
+	if adapter.streamCalls != 0 {
+		t.Fatalf("expected no Stream calls, got %d", adapter.streamCalls)
+	}
+
+	waitForComparison(t, tracker, 1)
+	recent := tracker.Recent("")
+	if len(recent) != 1 {
+		t.Fatalf("recent comparisons = %d, want 1", len(recent))
+	}
+	comparison := recent[0].Comparison
+	if !comparison.Changed || !comparison.RouteChanged {
+		t.Fatalf("expected shadow comparison route change, got %+v", comparison)
+	}
+	if comparison.Primary.SelectedModel != "balanced-coder" {
+		t.Fatalf("primary selected model = %q, want balanced-coder", comparison.Primary.SelectedModel)
+	}
+	if comparison.Secondary.SelectedModel != "premium-reasoning" {
+		t.Fatalf("shadow selected model = %q, want premium-reasoning", comparison.Secondary.SelectedModel)
+	}
+	if adapter.lastReq == nil {
+		t.Fatal("expected provider request to be recorded")
+	}
+	if adapter.lastReq.Model != comparison.Primary.ProviderModelID {
+		t.Fatalf("provider request model = %q, want primary provider model %q", adapter.lastReq.Model, comparison.Primary.ProviderModelID)
+	}
+}
+
 func TestChat_ProviderErrorsMappedToStatus(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -468,4 +773,49 @@ func TestChat_ProviderErrorsMappedToStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+func waitForComparison(t *testing.T, tracker *eventlog.ComparisonTracker, want int64) {
+	t.Helper()
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if tracker.Summary().Total >= want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("comparison total = %d, want at least %d", tracker.Summary().Total, want)
+}
+
+func mustForceModelPolicyCache(t *testing.T, snap *registry.Snapshot, version, tenantID, model string) *policy.Cache {
+	t.Helper()
+	src := fmt.Sprintf(`
+version: %s
+settings:
+  default_model_profile: balanced
+  conservative_unknowns: true
+  max_router_overhead_ms: 100
+  default_timeout_ms: 30000
+  default_retention: standard
+rules:
+  - id: force_model
+    when:
+      tenant: %s
+    route:
+      force:
+        model: %s
+`, version, tenantID, model)
+	parsed, err := policy.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse policy: %v", err)
+	}
+	cache, err := policy.NewCache([]policy.Source{{
+		Scope:    policy.Scope{TenantID: tenantID},
+		Policy:   parsed,
+		Registry: snap,
+	}})
+	if err != nil {
+		t.Fatalf("new policy cache: %v", err)
+	}
+	return cache
 }

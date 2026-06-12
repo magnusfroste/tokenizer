@@ -6,7 +6,7 @@
 - `type: data`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,10 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (klar 2026-06-12)
+
+- Offline-only deterministisk lightweight classifier experiment i `internal/classifier` med perceptron-liknande träning över prompttokens, extraherade features och baseline-output.
+- Dataset/loader i `internal/evals` och `docs/fixtures/classifier-experiment-dataset-v1.yaml`, med train/test-split och secret-guard.
+- Baseline jämförs mot tränad modell i tester; produktionens `router.NewJobDescriptor` och request path är oförändrade.
+- Dokumentation anger att production rollout kräver separat ADR.

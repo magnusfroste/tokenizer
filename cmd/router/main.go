@@ -20,6 +20,7 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/health"
 	"github.com/magnusfroste/tokenizer/internal/outcomes"
+	"github.com/magnusfroste/tokenizer/internal/policy"
 	"github.com/magnusfroste/tokenizer/internal/provider"
 	"github.com/magnusfroste/tokenizer/internal/registry"
 	"github.com/magnusfroste/tokenizer/internal/retention"
@@ -70,6 +71,16 @@ func main() {
 		logger.Error("failed to create registry store", "err", err)
 		os.Exit(1)
 	}
+	policyCache, err := loadRuntimePolicyCache(snap, os.Getenv("ROUTER_POLICY_PATH"))
+	if err != nil {
+		logger.Error("failed to build policy cache", "err", err)
+		os.Exit(1)
+	}
+	shadowPolicyCache, err := loadOptionalRuntimePolicyCache(snap, os.Getenv("ROUTER_SHADOW_POLICY_PATH"))
+	if err != nil {
+		logger.Error("failed to build shadow policy cache", "err", err)
+		os.Exit(1)
+	}
 	eng := engine.New(store)
 	// Global conservative mode (ISSUE-060): incident lever that routes uncertain
 	// classifications at a raised minimum tier. See 07-operations/runbook.md.
@@ -89,6 +100,7 @@ func main() {
 	spendTracker := spend.New()
 	outcomeStore := outcomes.NewStore()
 	eventQueue := eventlog.NewQueue(0)
+	comparisonTracker := eventlog.NewComparisonTracker(0)
 
 	// Budget caps (ISSUE-051): a ledger accrues spend from the event queue and an
 	// evaluator checks it on the request path. Caps are opt-in; ROUTER_BUDGET_USD
@@ -110,9 +122,9 @@ func main() {
 		0,
 	)
 
-	// Build the fan-out event handler: logging + metrics + spend + budget ledger.
-	loggingHandler := &eventlog.LoggingHandler{Logger: logger}
-	combinedHandler := eventlog.MultiHandler(loggingHandler, spendTracker, budgetLedger)
+	// Build the fan-out event handler: logging + metrics + spend + budget ledger
+	// + shadow comparison tracking.
+	combinedHandler := buildEventHandler(logger, spendTracker, budgetLedger, comparisonTracker)
 
 	// Start the queue worker in the background.
 	workerCtx, workerCancel := context.WithCancel(context.Background())
@@ -130,10 +142,14 @@ func main() {
 		KeyStore:               keyStore,
 		Provider:               mock,
 		ContextPipelineEnabled: parseBoolEnv(os.Getenv("ROUTER_CONTEXT_PIPELINE_ENABLED")),
+		PromptAdapter:          buildPromptAdapter(parseBoolEnv(os.Getenv("ROUTER_PROMPT_ADAPTER_ENABLED"))),
 		Engine:                 eng,
 		Adapters:               adapters,
+		PolicyCache:            policyCache,
+		ShadowPolicyCache:      shadowPolicyCache,
 		HealthTracker:          healthTracker,
 		SpendTracker:           spendTracker,
+		ComparisonTracker:      comparisonTracker,
 		EventQueue:             eventQueue,
 		RegistryVersion:        snap.RegistryVersion(),
 		OutcomeStore:           outcomeStore,
@@ -172,6 +188,64 @@ func main() {
 		logger.Error("shutdown error", "err", err)
 	}
 	workerCancel() // drain event queue gracefully
+}
+
+func loadRuntimePolicyCache(snapshot *registry.Snapshot, path string) (*policy.Cache, error) {
+	return policy.NewRuntimeCache(snapshot, strings.TrimSpace(path))
+}
+
+func loadOptionalRuntimePolicyCache(snapshot *registry.Snapshot, path string) (*policy.Cache, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, nil
+	}
+	return policy.NewRuntimeCache(snapshot, path)
+}
+
+func buildPromptAdapter(enabled bool) *provider.PromptAdapter {
+	if !enabled {
+		return nil
+	}
+	return &provider.PromptAdapter{
+		Enabled: true,
+		ModelProfiles: map[string]string{
+			"cheap-general":     "cheap",
+			"balanced-coder":    "balanced",
+			"premium-reasoning": "premium",
+		},
+		Rules: []provider.PromptAdapterRule{
+			{
+				Name: "cheap-system-cost-aware",
+				Match: provider.PromptAdapterMatch{
+					Profiles: []string{"cheap"},
+				},
+				Mutation: provider.SystemPromptMutation{
+					Suffix: "\n\nPrefer concise answers and avoid unnecessary reasoning traces.",
+				},
+			},
+			{
+				Name: "premium-system-depth",
+				Match: provider.PromptAdapterMatch{
+					Profiles: []string{"premium"},
+				},
+				Mutation: provider.SystemPromptMutation{
+					Prefix: "Use careful, high-assurance reasoning for this task.\n\n",
+				},
+			},
+		},
+	}
+}
+
+func buildEventHandler(logger *slog.Logger, spendTracker *spend.Tracker, budgetLedger *budget.Ledger, comparisonTracker *eventlog.ComparisonTracker) eventlog.Handler {
+	handlers := []eventlog.Handler{
+		&eventlog.LoggingHandler{Logger: logger},
+		spendTracker,
+		budgetLedger,
+	}
+	if comparisonTracker != nil {
+		handlers = append(handlers, comparisonTracker)
+	}
+	return eventlog.MultiHandler(handlers...)
 }
 
 func parseLogLevel(s string) slog.Level {

@@ -30,18 +30,21 @@ type Config struct {
 	Provider               provider.Adapter // legacy: used when Engine is nil
 	ContextPipeline        *contextproc.Pipeline
 	ContextPipelineEnabled bool
+	PromptAdapter          *provider.PromptAdapter
 	Readiness              []ReadyzChecker
 
 	// Routing engine (Sprint 05). Optional — if nil, Provider is used directly.
-	Engine      *engine.Engine
-	Adapters    map[string]provider.Adapter // provider ID → adapter
-	PolicyCache *policy.Cache
+	Engine            *engine.Engine
+	Adapters          map[string]provider.Adapter // provider ID → adapter
+	PolicyCache       *policy.Cache
+	ShadowPolicyCache *policy.Cache
 
 	// Observability (Sprint 06). All optional.
-	HealthTracker   *health.Tracker
-	SpendTracker    *spend.Tracker
-	EventQueue      *eventlog.Queue
-	RegistryVersion string // shown on dashboard
+	HealthTracker     *health.Tracker
+	SpendTracker      *spend.Tracker
+	EventQueue        *eventlog.Queue
+	ComparisonTracker *eventlog.ComparisonTracker
+	RegistryVersion   string // shown on dashboard
 
 	// Feedback (Sprint 07). Optional.
 	OutcomeStore *outcomes.Store
@@ -72,10 +75,12 @@ func New(cfg Config) http.Handler {
 	chat := ChatCompletionsHandler(cfg.Provider, ChatOptions{
 		ContextPipeline:        cfg.ContextPipeline,
 		ContextPipelineEnabled: cfg.ContextPipelineEnabled,
+		PromptAdapter:          cfg.PromptAdapter,
 		Logger:                 cfg.Logger,
 		Engine:                 cfg.Engine,
 		Adapters:               cfg.Adapters,
 		PolicyCache:            cfg.PolicyCache,
+		ShadowPolicyCache:      cfg.ShadowPolicyCache,
 		HealthTracker:          cfg.HealthTracker,
 		EventQueue:             cfg.EventQueue,
 		Auditor:                cfg.Auditor,
@@ -106,14 +111,17 @@ func New(cfg Config) http.Handler {
 
 	// Dashboard (no auth — read-only aggregated stats).
 	htmlH, dataH := DashboardHandler(DashboardOptions{
-		Spend:    cfg.SpendTracker,
-		Health:   cfg.HealthTracker,
-		Outcomes: cfg.OutcomeStore,
-		Logger:   cfg.Logger,
-		Version:  cfg.RegistryVersion,
+		Spend:       cfg.SpendTracker,
+		Health:      cfg.HealthTracker,
+		Outcomes:    cfg.OutcomeStore,
+		Comparisons: cfg.ComparisonTracker,
+		Logger:      cfg.Logger,
+		Version:     cfg.RegistryVersion,
 	})
-	mux.HandleFunc("GET /router/dashboard", htmlH)
-	mux.HandleFunc("GET /router/dashboard/data", dataH)
+	mux.Handle("GET /router/dashboard",
+		auth.Middleware(cfg.KeyStore)(auth.RequireRole(auth.RoleAdmin)(http.HandlerFunc(htmlH))))
+	mux.Handle("GET /router/dashboard/data",
+		auth.Middleware(cfg.KeyStore)(auth.RequireRole(auth.RoleAdmin)(http.HandlerFunc(dataH))))
 
 	return middleware.RequestID(middleware.Logger(cfg.Logger)(mux))
 }

@@ -6,7 +6,7 @@
 - `epic: EPIC-04`
 - `priority: P1`
 - `type: backend`
-- `state: ready-for-agent`
+- `state: done`
 - `adr: ADR-0013`
 - `sprint: 04`
 - `category: enhancement`
@@ -40,3 +40,10 @@ ADR-0013 says context processors mutate customer input and must be opt-in via te
 - Activation is policy-controlled and covered by focused tests.
 - `go test ./...`, `go vet ./...`, and `make lint` pass.
 - `.ai/tasks.json` and `05-issues/issue-index.md` reflect the task state.
+
+## Implementation (klar 2026-06-12)
+
+- Policy DSL stöder `route.force.context_pipeline: true|false`; default är off och kompilerad policy avgör aktivering server-side.
+- Runtime bootstrap i `cmd/router` wirar `PolicyCache` och kan ladda policyfil via `ROUTER_POLICY_PATH`; `ROUTER_CONTEXT_PIPELINE_ENABLED` fungerar som operator rollout/kill switch, inte som enda aktiveringskälla.
+- Chat-path kör context pipeline efter policy/routing-beslut och precis före non-streaming provider-call; streaming skippar fortsatt pipelinen.
+- Headers och client metadata kan inte slå på processors; tester täcker default-off, policy-enabled, kill switch och bypass-försök.

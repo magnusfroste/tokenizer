@@ -30,3 +30,34 @@ func TestHasScopeNilTenant(t *testing.T) {
 		t.Error("nil tenant should grant no scopes")
 	}
 }
+
+func TestHasRole(t *testing.T) {
+	cases := []struct {
+		name     string
+		role     string
+		required string
+		want     bool
+	}{
+		{"legacy role is unrestricted", "", RoleAdmin, true},
+		{"admin grants admin", RoleAdmin, RoleAdmin, true},
+		{"admin satisfies user", RoleAdmin, RoleUser, true},
+		{"user grants user", RoleUser, RoleUser, true},
+		{"user does not grant admin", RoleUser, RoleAdmin, false},
+		{"unknown role must match exactly", "viewer", RoleAdmin, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tn := &Tenant{ID: "tn", Role: c.role}
+			if got := tn.HasRole(c.required); got != c.want {
+				t.Errorf("HasRole(%q) with %q = %v, want %v", c.required, c.role, got, c.want)
+			}
+		})
+	}
+}
+
+func TestHasRoleNilTenant(t *testing.T) {
+	var tn *Tenant
+	if tn.HasRole(RoleAdmin) {
+		t.Error("nil tenant should grant no roles")
+	}
+}

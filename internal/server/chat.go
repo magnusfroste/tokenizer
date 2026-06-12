@@ -35,13 +35,15 @@ const firstTokenTimeoutMS = 10_000
 type ChatOptions struct {
 	ContextPipeline        *contextproc.Pipeline
 	ContextPipelineEnabled bool
+	PromptAdapter          *provider.PromptAdapter
 	Logger                 *slog.Logger
 
 	// Routing (Sprint 05). Optional — if Engine is nil the handler uses the
 	// single Provider passed to ChatCompletionsHandler.
-	Engine      *engine.Engine
-	Adapters    map[string]provider.Adapter // provider ID → adapter
-	PolicyCache *policy.Cache
+	Engine            *engine.Engine
+	Adapters          map[string]provider.Adapter // provider ID → adapter
+	PolicyCache       *policy.Cache
+	ShadowPolicyCache *policy.Cache
 
 	// Observability (Sprint 06). All optional.
 	EventQueue    *eventlog.Queue
@@ -105,26 +107,6 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 		// Optional prompt logging — off by default, gated per tenant (ISSUE-045).
 		cfg.logPrompt(r.Context(), job, &req)
 
-		// Context pipeline (optional).
-		if cfg.ContextPipelineEnabled {
-			pipeline := cfg.ContextPipeline
-			if pipeline == nil {
-				pipeline = contextproc.NewNoopPipeline()
-			}
-			if pipeline.Logger == nil && cfg.Logger != nil {
-				pipelineCopy := *pipeline
-				pipelineCopy.Logger = cfg.Logger
-				pipeline = &pipelineCopy
-			}
-			result := pipeline.Run(r.Context(), normalized, job)
-			if result.TotalTokensSaved > 0 {
-				w.Header().Set("X-Router-Context-Savings", strconv.Itoa(result.TotalTokensSaved))
-			}
-			if len(result.Applied) > 0 || len(result.Skipped) > 0 {
-				logContextPipeline(r, cfg.Logger, result)
-			}
-		}
-
 		// Routing engine path.
 		if cfg.Engine != nil && len(cfg.Adapters) > 0 {
 			// Budget caps (ISSUE-051): block or downgrade before routing.
@@ -133,6 +115,7 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 			}
 
 			pol := lookupPolicy(cfg.PolicyCache, job)
+			shadowPol := lookupPolicy(cfg.ShadowPolicyCache, job)
 
 			// Route decision cache (ISSUE-052): low-risk requests may reuse a
 			// versioned, previously-computed decision instead of re-scoring.
@@ -143,6 +126,7 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 				cacheable = cfg.DecisionCache != nil && decisioncache.Cacheable(job)
 				cacheHit  bool
 			)
+			health := cfg.healthSnapshot()
 			if cacheable {
 				cacheKey = decisioncache.Key(&req, job, policyVersion(pol), cfg.RegistryVersion)
 				if cached, ok := cfg.DecisionCache.Get(cacheKey); ok {
@@ -152,10 +136,10 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 
 			routeStart := time.Now()
 			if !cacheHit {
-				health := cfg.healthSnapshot()
 				dec, decErr = cfg.Engine.Decide(job, pol, health, req.Stream)
 			}
 			routingDur := time.Since(routeStart)
+			shadowComparison := cfg.compareShadowDecision(r.Context(), job, dec, decErr, shadowPol, health, req.Stream)
 
 			if cacheable && !cacheHit && decErr == nil && !dec.Blocked {
 				cfg.DecisionCache.Put(cacheKey, dec)
@@ -165,7 +149,7 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 			}
 
 			// Always enqueue a decision event (blocked or not).
-			cfg.enqueueDecision(job, dec, routingDur, decErr)
+			cfg.enqueueDecision(job, dec, shadowComparison, routingDur, decErr)
 
 			if decErr != nil {
 				if errors.Is(decErr, engine.ErrBlocked) {
@@ -196,6 +180,8 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 
 			if adapter, ok := cfg.Adapters[dec.SelectedProvider]; ok {
 				normalized.Model = dec.ProviderModelID
+				cfg.maybeRunContextPipeline(w, r, normalized, job, pol, req.Stream)
+				cfg.maybeRunPromptAdapter(r, normalized, dec.SelectedModel, dec.ProviderModelID)
 				start := time.Now()
 				resp, err := adapter.Complete(r.Context(), normalized)
 				durationMs := time.Since(start).Milliseconds()
@@ -217,6 +203,8 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 			streamChatCompletion(w, r, p, normalized, cfg.Logger)
 			return
 		}
+		cfg.maybeRunContextPipeline(w, r, normalized, job, lookupPolicy(cfg.PolicyCache, job), req.Stream)
+		cfg.maybeRunPromptAdapter(r, normalized, normalized.Model, normalized.Model)
 		resp, err := p.Complete(r.Context(), normalized)
 		if err != nil {
 			status, code := mapProviderError(err)
@@ -535,6 +523,89 @@ func logContextPipeline(r *http.Request, logger *slog.Logger, result contextproc
 	)
 }
 
+func (o *ChatOptions) maybeRunContextPipeline(
+	w http.ResponseWriter,
+	r *http.Request,
+	normalized *provider.NormalizedModelRequest,
+	job *router.JobDescriptor,
+	pol *policy.CompiledPolicy,
+	streaming bool,
+) {
+	if !contextPipelineAllowed(o.ContextPipelineEnabled, pol, job, streaming) {
+		return
+	}
+
+	pipeline := o.ContextPipeline
+	if pipeline == nil {
+		pipeline = contextproc.NewNoopPipeline()
+	}
+	if pipeline.Logger == nil && o.Logger != nil {
+		pipelineCopy := *pipeline
+		pipelineCopy.Logger = o.Logger
+		pipeline = &pipelineCopy
+	}
+
+	result := pipeline.Run(r.Context(), normalized, job)
+	if result.TotalTokensSaved > 0 {
+		w.Header().Set("X-Router-Context-Savings", strconv.Itoa(result.TotalTokensSaved))
+	}
+	if len(result.Applied) > 0 || len(result.Skipped) > 0 {
+		logContextPipeline(r, o.Logger, result)
+	}
+}
+
+func contextPipelineAllowed(operatorEnabled bool, pol *policy.CompiledPolicy, job *router.JobDescriptor, streaming bool) bool {
+	if !operatorEnabled || streaming || pol == nil || job == nil {
+		return false
+	}
+	return pol.Evaluate(policy.EvaluationInput{
+		TenantID:             job.TenantID,
+		ProjectID:            job.ProjectID,
+		TaskType:             string(job.TaskType),
+		RiskLevel:            string(job.RiskLevel),
+		Sensitivity:          string(job.Sensitivity),
+		PromptTokensEstimate: job.PromptTokensEstimate,
+		Keywords:             append([]string(nil), job.Keywords...),
+		FilesTouched:         append([]string(nil), job.FilesTouched...),
+		RequiresToolUse:      job.RequiresToolUse,
+		RequiresJSONSchema:   job.RequiresJSONSchema,
+		RequiresVision:       job.RequiresVision,
+		RouterMode:           string(job.RouterMode),
+	}).Route.ContextPipelineEnabled()
+}
+
+func (o *ChatOptions) maybeRunPromptAdapter(
+	r *http.Request,
+	normalized *provider.NormalizedModelRequest,
+	modelID string,
+	providerModelID string,
+) {
+	if o.PromptAdapter == nil || normalized == nil {
+		return
+	}
+	adapted, result := o.PromptAdapter.Apply(normalized, provider.PromptAdapterContext{
+		ModelID:         modelID,
+		ProviderModelID: providerModelID,
+	})
+	if adapted == nil {
+		return
+	}
+	*normalized = *adapted
+	if len(result.AppliedRules) == 0 {
+		return
+	}
+	logger := o.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.InfoContext(r.Context(), "prompt_adapter",
+		"request_id", middleware.RequestIDFromContext(r.Context()),
+		"selected_model", modelID,
+		"provider_model_id", providerModelID,
+		"applied_rules", result.AppliedRules,
+	)
+}
+
 // --- Observability helpers ---
 
 // healthSnapshot returns the current health snapshot; if no tracker is
@@ -547,7 +618,7 @@ func (o *ChatOptions) healthSnapshot() engine.HealthSnapshot {
 }
 
 // enqueueDecision enqueues a DecisionEvent if a queue is configured.
-func (o *ChatOptions) enqueueDecision(job *router.JobDescriptor, dec engine.RouteDecision, routingDur time.Duration, decErr error) {
+func (o *ChatOptions) enqueueDecision(job *router.JobDescriptor, dec engine.RouteDecision, shadowComparison *engine.DecisionComparison, routingDur time.Duration, decErr error) {
 	if o.EventQueue == nil {
 		return
 	}
@@ -567,9 +638,45 @@ func (o *ChatOptions) enqueueDecision(job *router.JobDescriptor, dec engine.Rout
 		RoutingDurationMicros: routingDur.Microseconds(),
 		Blocked:               dec.Blocked,
 		BlockCode:             dec.BlockCode,
+		ShadowComparison:      shadowComparison,
 		DecidedAt:             time.Now(),
 	}
 	o.EventQueue.Enqueue(eventlog.Event{Type: eventlog.EventTypeDecision, Decision: d})
+}
+
+func (o *ChatOptions) compareShadowDecision(
+	ctx context.Context,
+	job *router.JobDescriptor,
+	primary engine.RouteDecision,
+	primaryErr error,
+	shadowPol *policy.CompiledPolicy,
+	health engine.HealthSnapshot,
+	streaming bool,
+) *engine.DecisionComparison {
+	if o.Engine == nil || shadowPol == nil || job == nil {
+		return nil
+	}
+	if primaryErr != nil && !errors.Is(primaryErr, engine.ErrBlocked) {
+		return nil
+	}
+
+	shadowJob := cloneJobDescriptor(job)
+	shadowDecision, shadowErr := o.Engine.Decide(shadowJob, shadowPol, health, streaming)
+	if shadowErr != nil && !errors.Is(shadowErr, engine.ErrBlocked) {
+		logger := o.Logger
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.WarnContext(ctx, "shadow_decision_failed",
+			"request_id", job.RequestID,
+			"policy_version", policyVersion(shadowPol),
+			"error", shadowErr.Error(),
+		)
+		return nil
+	}
+
+	comparison := engine.CompareDecisions(primary, shadowDecision)
+	return &comparison
 }
 
 // logPrompt logs prompt message content when retention settings enable prompt
@@ -649,6 +756,26 @@ func cacheStatus(cacheable, hit bool) string {
 	default:
 		return "miss"
 	}
+}
+
+func cloneJobDescriptor(in *router.JobDescriptor) *router.JobDescriptor {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	out.FilesTouched = append([]string(nil), in.FilesTouched...)
+	out.Keywords = append([]string(nil), in.Keywords...)
+	if in.Metadata != nil {
+		out.Metadata = make(map[string]any, len(in.Metadata))
+		for k, v := range in.Metadata {
+			out.Metadata[k] = v
+		}
+	}
+	if in.ExplicitModel != nil {
+		model := *in.ExplicitModel
+		out.ExplicitModel = &model
+	}
+	return &out
 }
 
 // auditBlocked records a security-audit entry when policy blocks a request

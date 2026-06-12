@@ -172,6 +172,7 @@ type Force struct {
 	Provider         string
 	Model            string
 	Verifier         *bool
+	ContextPipeline  *bool
 	TimeoutMS        *int
 	Retention        Retention
 }
@@ -210,4 +211,10 @@ func (r Route) HasAction() bool {
 	return h.Tier != "" || h.Model != "" || h.Provider != "" || h.FallbackTier != "" ||
 		len(h.FallbackModels) > 0 || h.Verifier != nil || h.MaxCostUSD != nil ||
 		h.TimeoutMS != nil || h.Retention != "" || h.RequireCapability != ""
+}
+
+// ContextPipelineEnabled reports whether policy force explicitly enables the
+// context-processor pipeline. Absence defaults to false.
+func (r Route) ContextPipelineEnabled() bool {
+	return r.Force != nil && r.Force.ContextPipeline != nil && *r.Force.ContextPipeline
 }

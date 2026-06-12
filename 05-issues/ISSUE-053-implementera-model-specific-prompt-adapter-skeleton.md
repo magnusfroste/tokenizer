@@ -6,7 +6,7 @@
 - `type: backend`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,11 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (klar 2026-06-12)
+
+- Ny `internal/provider` prompt-adapter som är disabled-by-default och bara muterar befintliga `system`-rollmeddelanden i `NormalizedModelRequest.Messages`.
+- Stöd för exact-model och profilbaserade prefix/suffix-regler med clone-then-commit så default/non-target-paths är oförändrade och meddelandeordning bevaras.
+- Hook i chat-path efter context pipeline och före provider `Complete`, med strukturerad loggning av regelnamn utan promptinnehåll.
+- `cmd/router` kan aktivera adaptern via `ROUTER_PROMPT_ADAPTER_ENABLED`; default är fortsatt disabled.
+- Tester täcker disabled default, två modell/profil-matcher, clone-säkerhet och server-hook.

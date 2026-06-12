@@ -284,6 +284,66 @@ func TestCacheRejectsProjectScopeWithoutTenant(t *testing.T) {
 	}
 }
 
+func TestCompileContextPipelineForceDefaultsOffAndFirstMatchWins(t *testing.T) {
+	src := `
+version: pv_context_pipeline
+settings:
+  default_model_profile: balanced
+  conservative_unknowns: true
+  max_router_overhead_ms: 100
+  default_timeout_ms: 30000
+  default_retention: standard
+rules:
+  - id: enable_context_pipeline
+    when:
+      tenant: tn_enabled
+    route:
+      force:
+        context_pipeline: true
+  - id: disable_context_pipeline_later
+    when:
+      tenant: tn_enabled
+    route:
+      force:
+        context_pipeline: false
+`
+	compiled, err := Compile(mustParse(t, src), testSnapshot(t))
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	enabled := compiled.Evaluate(EvaluationInput{TenantID: "tn_enabled"})
+	if !enabled.Route.ContextPipelineEnabled() {
+		t.Fatalf("context pipeline should be enabled: %+v", enabled.Route.Force)
+	}
+	if !containsExplanation(enabled.Explanations, "force.context_pipeline ignored") {
+		t.Fatalf("missing force shadow explanation: %v", enabled.Explanations)
+	}
+
+	disabled := compiled.Evaluate(EvaluationInput{TenantID: "tn_other"})
+	if disabled.Route.ContextPipelineEnabled() {
+		t.Fatalf("context pipeline should default off: %+v", disabled.Route.Force)
+	}
+}
+
+func TestNewDefaultRuntimeCache(t *testing.T) {
+	cache, err := NewDefaultRuntimeCache(testSnapshot(t))
+	if err != nil {
+		t.Fatalf("NewDefaultRuntimeCache: %v", err)
+	}
+	active, ok := cache.Active(Scope{})
+	if !ok {
+		t.Fatal("expected default scope policy")
+	}
+	if got := active.Version(); got != "pv_runtime_2026_06_12" {
+		t.Fatalf("version = %q", got)
+	}
+	eval := active.Evaluate(EvaluationInput{RouterMode: "auto"})
+	if eval.Route.ContextPipelineEnabled() {
+		t.Fatalf("default runtime policy should leave context pipeline off")
+	}
+}
+
 func containsExplanation(explanations []string, fragment string) bool {
 	for _, explanation := range explanations {
 		if strings.Contains(explanation, fragment) {

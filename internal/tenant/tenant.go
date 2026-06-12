@@ -9,6 +9,9 @@ type Tenant struct {
 	ID      string
 	Project string
 	KeyID   string
+	// Role names the principal role independent from scopes. The zero value is
+	// treated as a legacy unrestricted key for backward compatibility.
+	Role string
 	// Scopes lists the capabilities the API key grants. An empty set means the
 	// key is unrestricted (legacy keys); the wildcard "*" grants everything.
 	Scopes []string
@@ -16,6 +19,11 @@ type Tenant struct {
 
 // ScopeWildcard grants every scope when present in a tenant's scope set.
 const ScopeWildcard = "*"
+
+const (
+	RoleUser  = "user"
+	RoleAdmin = "admin"
+)
 
 // HasScope reports whether the tenant's key grants the required scope. A nil
 // tenant grants nothing; an empty scope set is treated as unrestricted so keys
@@ -33,6 +41,26 @@ func (t *Tenant) HasScope(required string) bool {
 		}
 	}
 	return false
+}
+
+// HasRole reports whether the tenant satisfies the required role. Legacy keys
+// with no explicit role remain unrestricted so existing API keys keep working
+// until role assignments are rolled out.
+func (t *Tenant) HasRole(required string) bool {
+	if t == nil {
+		return false
+	}
+	if required == "" || t.Role == "" {
+		return true
+	}
+	switch required {
+	case RoleUser:
+		return t.Role == RoleUser || t.Role == RoleAdmin
+	case RoleAdmin:
+		return t.Role == RoleAdmin
+	default:
+		return t.Role == required
+	}
 }
 
 type ctxKey struct{}

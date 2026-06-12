@@ -6,7 +6,7 @@
 - `type: data`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,10 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (klar 2026-06-12)
+
+- Eval reports innehåller nu cost-quality frontier per taskklass med modellrader, snittkostnad och quality v1.
+- Quality v1 blandar eval pass-rate med registry quality priors; outcomes hålls separat och vägs inte in i frontier-poäng.
+- Pareto-frontier/dominated-markering och deterministiska rekommendationer för `best_value`, `lowest_cost`, `highest_quality`.
+- `report.json` och `report.txt` innehåller frontier-sektion; tester täcker tomma/single/tie-fall.
