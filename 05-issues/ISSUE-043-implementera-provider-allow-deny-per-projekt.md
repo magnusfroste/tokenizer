@@ -6,7 +6,7 @@
 - `type: security`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,10 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (status-sync)
+
+Implementerat i commit `23f4fde` (feat(security): enforce provider allow/deny on
+pinned models). Engine enforcar projektets allow/deny-listor och blockerar med
+`provider_not_allowed` (se `internal/engine/engine.go`). Status-etiketten
+justerad till `done` för att matcha koden.
