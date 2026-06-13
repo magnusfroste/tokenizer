@@ -25,7 +25,10 @@ dev:
 	$(GO) run ./cmd/router
 
 migrate:
-	$(PSQL) "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f db/migrations/001_foundation.sql
+	@for f in $$(ls db/migrations/*.sql | sort); do \
+		echo "applying $$f"; \
+		$(PSQL) "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f "$$f" || exit 1; \
+	done
 
 seed:
 	$(PSQL) "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f db/seeds/local.sql
