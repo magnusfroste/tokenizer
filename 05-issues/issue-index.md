@@ -14,8 +14,8 @@ Klart enligt kod- och test-evidens:
 
 Redo för agent:
 
-- ISSUE-025 till ISSUE-060.
-- ISSUE-063 — Policy-gated context pipeline activation.
+- Inga öppna issues. Hela backlogen (ISSUE-001 till ISSUE-063) är `done` per
+  2026-06-13 — se listan nedan.
 
 Klart i sprint 05–08 (kod- och test-evidens):
 

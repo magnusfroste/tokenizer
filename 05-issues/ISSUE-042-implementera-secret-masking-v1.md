@@ -6,7 +6,7 @@
 - `type: security`
 - `sprint: 08`
 - `category: enhancement`
-- `state: ready-for-agent`
+- `state: done`
 
 ## Mål
 
@@ -33,3 +33,10 @@ Detta issue stödjer målet att bygga en låg-latency prompt-router som kan väl
 - Acceptanskriterierna är uppfyllda.
 - Tester passerar.
 - Dokumentation eller kontrakt är uppdaterade vid behov.
+
+## Implementation (status-sync)
+
+Implementerat i commit `a9b5bb6` (feat(security): secret masking v1 at the error
+boundary). `internal/secrets` (regex-baserad maskning av API-nycklar, bearer-
+tokens, JWT, DB-credentials) appliceras på utgående fel-/loggränser via
+`server.maskOutbound`. Status-etiketten justerad till `done` för att matcha koden.
