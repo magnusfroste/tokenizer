@@ -61,9 +61,39 @@ func main() {
 		Client:  &http.Client{Timeout: 30 * time.Second},
 	}
 
-	snap, err := registry.DefaultSnapshot()
-	if err != nil {
-		logger.Error("failed to build registry", "err", err)
+	// Provider selection (ISSUE: OpenRouter integration). When OPENROUTER_API_KEY
+	// is set, route through OpenRouter (a real OpenAI-compatible provider) via the
+	// existing OpenAIAdapter; otherwise fall back to the in-process mock so the
+	// build/dev path needs no credentials.
+	var (
+		snap            *registry.Snapshot
+		primaryProvider provider.Adapter
+		adapters        map[string]provider.Adapter
+		snapErr         error
+	)
+	if orKey := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")); orKey != "" {
+		snap, snapErr = registry.OpenRouterSnapshot()
+		orAdapter := &provider.OpenAIAdapter{
+			BaseURL: "https://openrouter.ai/api/v1",
+			APIKey:  orKey,
+			Client:  &http.Client{Timeout: 60 * time.Second},
+			Timeout: 60 * time.Second,
+		}
+		primaryProvider = orAdapter
+		adapters = map[string]provider.Adapter{"openrouter": orAdapter}
+		logger.Info("using OpenRouter provider", "base_url", "https://openrouter.ai/api/v1")
+	} else {
+		snap, snapErr = registry.DefaultSnapshot()
+		primaryProvider = mock
+		// In local dev the mock adapter serves all providers.
+		adapters = map[string]provider.Adapter{
+			"openai":    mock,
+			"anthropic": mock,
+		}
+		logger.Info("using mock provider", "mock_provider", mockURL)
+	}
+	if snapErr != nil {
+		logger.Error("failed to build registry", "err", snapErr)
 		os.Exit(1)
 	}
 	store, err := registry.NewStore(snap)
@@ -87,12 +117,6 @@ func main() {
 	if parseBoolEnv(os.Getenv("ROUTER_CONSERVATIVE_MODE")) {
 		eng.SetConservative(true)
 		logger.Info("global conservative mode enabled")
-	}
-
-	// In local dev the mock adapter serves all providers.
-	adapters := map[string]provider.Adapter{
-		"openai":    mock,
-		"anthropic": mock,
 	}
 
 	// Observability: health tracker, spend tracker, event queue.
@@ -140,7 +164,7 @@ func main() {
 	handler := server.New(server.Config{
 		Logger:                 logger,
 		KeyStore:               keyStore,
-		Provider:               mock,
+		Provider:               primaryProvider,
 		ContextPipelineEnabled: parseBoolEnv(os.Getenv("ROUTER_CONTEXT_PIPELINE_ENABLED")),
 		PromptAdapter:          buildPromptAdapter(parseBoolEnv(os.Getenv("ROUTER_PROMPT_ADAPTER_ENABLED"))),
 		Engine:                 eng,
