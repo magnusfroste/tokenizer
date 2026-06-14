@@ -68,6 +68,7 @@ hdrs=$(curl -s -D - -o /tmp/smoke-chat.json -X POST "$BASE/v1/chat/completions" 
   -d '{"model":"auto","messages":[{"role":"user","content":"write a git commit message"}]}')
 echo "$hdrs" | grep -qi '^HTTP/1.1 200' || fail "chat completion not 200"
 echo "$hdrs" | grep -qi '^X-Router-Selected-Model:' || fail "missing X-Router-Selected-Model header"
+echo "$hdrs" | grep -qi '^X-Router-Cost-USD:' || fail "missing X-Router-Cost-USD header"
 grep -q '"object":"chat.completion"' /tmp/smoke-chat.json || fail "chat response not a completion"
 pass "chat completion routed (selected $(echo "$hdrs" | grep -i '^X-Router-Selected-Model:' | tr -d '\r' | awk '{print $2}'))"
 

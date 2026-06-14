@@ -200,6 +200,7 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 					writeError(w, status, code, err.Error())
 					return
 				}
+				cfg.setUsageHeaders(w, dec.SelectedModel, dec.SelectedProvider, resp)
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(resp)
 				return
@@ -865,6 +866,19 @@ func (o *ChatOptions) recordAttempt(requestID, providerID, modelID string, attem
 		a.ActualCostUSD = o.actualCostUSD(modelID, providerID, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
 	}
 	o.EventQueue.Enqueue(eventlog.Event{Type: eventlog.EventTypeAttempt, Attempt: a})
+}
+
+// setUsageHeaders surfaces per-request token usage and realized cost as response
+// headers so clients and tooling can see what the call cost. No-op for a nil
+// response.
+func (o *ChatOptions) setUsageHeaders(w http.ResponseWriter, modelID, providerID string, resp *openai.ChatResponse) {
+	if resp == nil {
+		return
+	}
+	w.Header().Set("X-Router-Input-Tokens", strconv.Itoa(resp.Usage.PromptTokens))
+	w.Header().Set("X-Router-Output-Tokens", strconv.Itoa(resp.Usage.CompletionTokens))
+	costUSD := o.actualCostUSD(modelID, providerID, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
+	w.Header().Set("X-Router-Cost-USD", strconv.FormatFloat(costUSD, 'f', 6, 64))
 }
 
 // actualCostUSD prices real token usage against the selected model's registry
