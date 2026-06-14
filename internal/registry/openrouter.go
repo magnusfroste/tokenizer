@@ -6,8 +6,14 @@ import "time"
 // model tiers through OpenRouter (https://openrouter.ai), an OpenAI-compatible
 // aggregator. Model IDs match DefaultDefinition (so policies and evals are
 // unchanged) but the provider is `openrouter` and ProviderModelID values are
-// OpenRouter model slugs. Costs mirror the default profiles as approximations;
-// tune them against OpenRouter's /models pricing for production.
+// OpenRouter model slugs.
+//
+// Slugs, prices and context windows were verified against OpenRouter's
+// /api/v1/models on 2026-06-14. To refresh:
+//
+//	curl -s https://openrouter.ai/api/v1/models | jq '.data[] | select(.id=="<slug>") | {pricing, context_length}'
+//
+// Cost is stored as micro-USD per million tokens = pricing_per_token_USD * 1e12.
 func OpenRouterDefinition() Definition {
 	return Definition{
 		RegistryVersion: "registry-openrouter-2026-06-14",
@@ -71,20 +77,21 @@ func OpenRouterDefinition() Definition {
 			{
 				ID:              "premium-reasoning",
 				ProviderID:      "openrouter",
-				ProviderModelID: "anthropic/claude-3.5-sonnet",
+				ProviderModelID: "anthropic/claude-sonnet-4.5",
 				Tier:            TierPremium,
 				Capabilities: Capabilities{
-					Chat:       true,
-					Streaming:  true,
-					ToolCalls:  true,
-					JSONSchema: true,
+					Chat:        true,
+					Streaming:   true,
+					ToolCalls:   true,
+					JSONSchema:  true,
+					LongContext: true,
 				},
 				Cost: CostMetadata{
 					Currency:                    "USD",
 					InputMicrosPerMillionToken:  3000000,
 					OutputMicrosPerMillionToken: 15000000,
 				},
-				ContextWindowTokens: 200000,
+				ContextWindowTokens: 1000000,
 				Enabled:             true,
 				Latency:             LatencyMetadata{P50FirstTokenMS: 850, P95FirstTokenMS: 2200},
 				QualityScores:       map[string]float64{"hard_reasoning": 0.88, "security_review": 0.82},
