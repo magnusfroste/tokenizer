@@ -49,3 +49,17 @@ type ErrorBody struct {
 	Type    string `json:"type"`
 	Code    string `json:"code,omitempty"`
 }
+
+// ModelObject is one entry in an OpenAI-style GET /v1/models response.
+type ModelObject struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"` // always "model"
+	Created int64  `json:"created"`
+	OwnedBy string `json:"owned_by"`
+}
+
+// ModelList is the OpenAI-style GET /v1/models response envelope.
+type ModelList struct {
+	Object string        `json:"object"` // always "list"
+	Data   []ModelObject `json:"data"`
+}
