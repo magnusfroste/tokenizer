@@ -49,6 +49,10 @@ streaming, riktig kostnad. Mock-providern är default när nyckeln är tom.
 OPENROUTER_API_KEY=sk-or-... LOCAL_API_KEY=local_router_key ./bin/router
 ```
 
+Eller lägg nyckeln i `.env` (kopierad från `.env.example`) — `make dev` och
+`make run` laddar `.env` automatiskt. Den fristående binären (`./bin/router`)
+läser bara process-miljön, så kör då via `make run` eller `set -a; source .env`.
+
 Tier-profilerna (`cheap`/`balanced`/`premium`) mappas till OpenRouter-modeller i
 `internal/registry/openrouter.go` — justera modell-slugs och priser där.
 
