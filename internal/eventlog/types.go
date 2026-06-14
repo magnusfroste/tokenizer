@@ -51,16 +51,24 @@ type DecisionEvent struct {
 
 // AttemptEvent is emitted once per provider call (primary or fallback).
 type AttemptEvent struct {
-	RequestID     string
-	ProviderID    string
-	ModelID       string
-	AttemptIndex  int
-	Success       bool
-	ErrorCode     string
-	DurationMs    int64
-	InputTokens   int
-	OutputTokens  int
+	RequestID    string
+	TenantID     string
+	ProjectID    string
+	ProviderID   string
+	ModelID      string
+	AttemptIndex int
+	Success      bool
+	ErrorCode    string
+	DurationMs   int64
+	InputTokens  int
+	OutputTokens int
+	// ActualCostUSD is the realized cost computed from provider token usage; 0
+	// when usage is unavailable (e.g. streaming), in which case spend falls back
+	// to EstimatedCostUSD.
 	ActualCostUSD float64
-	FirstTokenMs  int64
-	AttemptedAt   time.Time
+	// EstimatedCostUSD carries the decision-time estimate so spend accounting has
+	// a fallback and can attribute realized cost once, on the successful attempt.
+	EstimatedCostUSD float64
+	FirstTokenMs     int64
+	AttemptedAt      time.Time
 }

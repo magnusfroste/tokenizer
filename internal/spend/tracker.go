@@ -69,6 +69,10 @@ func (t *Tracker) Handle(_ context.Context, e eventlog.Event) {
 	}
 }
 
+// recordDecision counts requests per model and per tenant. Cost is intentionally
+// NOT added here — it is attributed once on the successful attempt (recordAttempt)
+// as realized cost, so the running totals reflect actual spend rather than the
+// decision-time estimate (and are never double-counted).
 func (t *Tracker) recordDecision(d *eventlog.DecisionEvent) {
 	if d.Blocked {
 		return
@@ -82,8 +86,6 @@ func (t *Tracker) recordDecision(d *eventlog.DecisionEvent) {
 		t.byModel[d.SelectedModel] = m
 	}
 	m.requests++
-	// Use estimated cost until an attempt event provides actual usage.
-	m.costUSD += d.EstimatedCostUSD
 
 	if d.TenantID != "" {
 		ten, ok := t.byTenant[d.TenantID]
@@ -92,12 +94,18 @@ func (t *Tracker) recordDecision(d *eventlog.DecisionEvent) {
 			t.byTenant[d.TenantID] = ten
 		}
 		ten.requests++
-		ten.costUSD += d.EstimatedCostUSD
 	}
 }
 
+// recordAttempt attributes realized cost and token usage once per request, on
+// the successful attempt. Cost is the actual cost from provider usage when
+// available, otherwise the decision-time estimate carried on the event.
 func (t *Tracker) recordAttempt(a *eventlog.AttemptEvent) {
-	if a.ActualCostUSD == 0 && a.InputTokens == 0 && a.OutputTokens == 0 {
+	cost := a.ActualCostUSD
+	if cost == 0 {
+		cost = a.EstimatedCostUSD
+	}
+	if cost == 0 && a.InputTokens == 0 && a.OutputTokens == 0 {
 		return
 	}
 	t.mu.Lock()
@@ -108,13 +116,17 @@ func (t *Tracker) recordAttempt(a *eventlog.AttemptEvent) {
 		m = &modelAccum{providerID: a.ProviderID}
 		t.byModel[a.ModelID] = m
 	}
-	if a.InputTokens > 0 || a.OutputTokens > 0 {
-		m.inputTokens += int64(a.InputTokens)
-		m.outputTokens += int64(a.OutputTokens)
-	}
-	// Replace estimated cost with actual when provided.
-	if a.ActualCostUSD > 0 {
-		m.costUSD = m.costUSD + a.ActualCostUSD
+	m.inputTokens += int64(a.InputTokens)
+	m.outputTokens += int64(a.OutputTokens)
+	m.costUSD += cost
+
+	if a.TenantID != "" {
+		ten, ok := t.byTenant[a.TenantID]
+		if !ok {
+			ten = &tenantAccum{}
+			t.byTenant[a.TenantID] = ten
+		}
+		ten.costUSD += cost
 	}
 }
 

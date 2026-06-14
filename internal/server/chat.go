@@ -13,6 +13,7 @@ import (
 	"github.com/magnusfroste/tokenizer/internal/audit"
 	"github.com/magnusfroste/tokenizer/internal/budget"
 	"github.com/magnusfroste/tokenizer/internal/contextproc"
+	"github.com/magnusfroste/tokenizer/internal/cost"
 	"github.com/magnusfroste/tokenizer/internal/decisioncache"
 	"github.com/magnusfroste/tokenizer/internal/engine"
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
@@ -173,7 +174,11 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 				candidates := buildStreamCandidates(dec, cfg.Adapters)
 				if len(candidates) > 0 {
 					normalized.Model = candidates[0].providerModelID
-					streamWithFallback(w, r, candidates, normalized, cfg.Logger, cfg.HealthTracker, cfg.EventQueue, job.RequestID)
+					streamWithFallback(w, r, candidates, normalized, cfg.Logger, cfg.HealthTracker, cfg.EventQueue, job.RequestID, attemptMeta{
+						tenantID:         job.TenantID,
+						projectID:        job.ProjectID,
+						estimatedCostUSD: dec.EstimatedCostUSD,
+					})
 					return
 				}
 			}
@@ -185,7 +190,11 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 				start := time.Now()
 				resp, err := adapter.Complete(r.Context(), normalized)
 				durationMs := time.Since(start).Milliseconds()
-				cfg.recordAttempt(job.RequestID, dec.SelectedProvider, dec.SelectedModel, 0, resp, err, durationMs, 0)
+				cfg.recordAttempt(job.RequestID, dec.SelectedProvider, dec.SelectedModel, 0, resp, err, durationMs, 0, attemptMeta{
+					tenantID:         job.TenantID,
+					projectID:        job.ProjectID,
+					estimatedCostUSD: dec.EstimatedCostUSD,
+				})
 				if err != nil {
 					status, code := mapProviderError(err)
 					writeError(w, status, code, err.Error())
@@ -256,6 +265,7 @@ func streamWithFallback(
 	healthTracker *health.Tracker,
 	queue *eventlog.Queue,
 	requestID string,
+	meta attemptMeta,
 ) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -279,15 +289,18 @@ func streamWithFallback(
 			queue.Enqueue(eventlog.Event{
 				Type: eventlog.EventTypeAttempt,
 				Attempt: &eventlog.AttemptEvent{
-					RequestID:    requestID,
-					ProviderID:   c.providerID,
-					ModelID:      c.modelID,
-					AttemptIndex: i,
-					Success:      err == nil,
-					ErrorCode:    code,
-					DurationMs:   durationMs,
-					FirstTokenMs: firstTokenMs,
-					AttemptedAt:  time.Now(),
+					RequestID:        requestID,
+					TenantID:         meta.tenantID,
+					ProjectID:        meta.projectID,
+					ProviderID:       c.providerID,
+					ModelID:          c.modelID,
+					AttemptIndex:     i,
+					Success:          err == nil,
+					ErrorCode:        code,
+					DurationMs:       durationMs,
+					FirstTokenMs:     firstTokenMs,
+					EstimatedCostUSD: meta.estimatedCostUSD,
+					AttemptedAt:      time.Now(),
 				},
 			})
 		}
@@ -806,8 +819,19 @@ func (o *ChatOptions) auditBlocked(ctx context.Context, job *router.JobDescripto
 	})
 }
 
-// recordAttempt updates the health tracker and enqueues an AttemptEvent.
-func (o *ChatOptions) recordAttempt(requestID, providerID, modelID string, attemptIdx int, resp *openai.ChatResponse, err error, durationMs, firstTokenMs int64) {
+// attemptMeta carries the per-request attributes an AttemptEvent needs for spend
+// accounting: who the request belongs to and the decision-time cost estimate
+// (used as a fallback when provider usage is unavailable).
+type attemptMeta struct {
+	tenantID         string
+	projectID        string
+	estimatedCostUSD float64
+}
+
+// recordAttempt updates the health tracker and enqueues an AttemptEvent. When
+// provider usage is present it computes the realized cost from the registry so
+// spend reflects actual, not estimated, spend.
+func (o *ChatOptions) recordAttempt(requestID, providerID, modelID string, attemptIdx int, resp *openai.ChatResponse, err error, durationMs, firstTokenMs int64, meta attemptMeta) {
 	success := err == nil
 	if o.HealthTracker != nil {
 		if success {
@@ -820,14 +844,17 @@ func (o *ChatOptions) recordAttempt(requestID, providerID, modelID string, attem
 		return
 	}
 	a := &eventlog.AttemptEvent{
-		RequestID:    requestID,
-		ProviderID:   providerID,
-		ModelID:      modelID,
-		AttemptIndex: attemptIdx,
-		Success:      success,
-		DurationMs:   durationMs,
-		FirstTokenMs: firstTokenMs,
-		AttemptedAt:  time.Now(),
+		RequestID:        requestID,
+		TenantID:         meta.tenantID,
+		ProjectID:        meta.projectID,
+		ProviderID:       providerID,
+		ModelID:          modelID,
+		AttemptIndex:     attemptIdx,
+		Success:          success,
+		DurationMs:       durationMs,
+		FirstTokenMs:     firstTokenMs,
+		EstimatedCostUSD: meta.estimatedCostUSD,
+		AttemptedAt:      time.Now(),
 	}
 	if err != nil {
 		a.ErrorCode = mapProviderErrorCode(err)
@@ -835,8 +862,35 @@ func (o *ChatOptions) recordAttempt(requestID, providerID, modelID string, attem
 	if resp != nil {
 		a.InputTokens = resp.Usage.PromptTokens
 		a.OutputTokens = resp.Usage.CompletionTokens
+		a.ActualCostUSD = o.actualCostUSD(modelID, providerID, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
 	}
 	o.EventQueue.Enqueue(eventlog.Event{Type: eventlog.EventTypeAttempt, Attempt: a})
+}
+
+// actualCostUSD prices real token usage against the selected model's registry
+// cost metadata. Returns 0 when the model or its cost is unavailable, in which
+// case spend falls back to the decision-time estimate.
+func (o *ChatOptions) actualCostUSD(modelID, providerID string, inTok, outTok int) float64 {
+	if o.Engine == nil || o.Engine.Registry == nil {
+		return 0
+	}
+	snap, err := o.Engine.Registry.Active()
+	if err != nil {
+		return 0
+	}
+	model, ok := snap.Model(modelID)
+	if !ok {
+		return 0
+	}
+	est, err := cost.EstimateCost(modelID, providerID, model.Cost, cost.TokenUsage{
+		InputTokens:  int64(inTok),
+		OutputTokens: int64(outTok),
+		Mode:         cost.ModeActual,
+	})
+	if err != nil {
+		return 0
+	}
+	return float64(est.TotalMicroUSD) / 1_000_000
 }
 
 func mapProviderErrorCode(err error) string {
