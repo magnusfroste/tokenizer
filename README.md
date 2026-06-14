@@ -73,8 +73,13 @@ make test          # unit + integration (race)
 make test-eval     # eval smoke
 make test-policy   # policy golden-cases
 make eval-report   # skriver eval-report/report.{json,txt}
+make smoke         # end-to-end mot mock: bootar mock+router, kör hela livscykeln
 make lint
 ```
+
+`make smoke` är det systematiska, repeterbara sättet att verifiera "det vi har"
+(deterministiskt, utan credentials). För riktiga modeller: kör samma router med
+`OPENROUTER_API_KEY` satt och peka en klient mot den.
 
 ## Mål
 
