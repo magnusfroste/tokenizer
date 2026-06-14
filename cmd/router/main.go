@@ -76,6 +76,9 @@ func main() {
 		orAdapter := &provider.OpenAIAdapter{
 			BaseURL: "https://openrouter.ai/api/v1",
 			APIKey:  orKey,
+			// OpenRouter attribution (optional but recommended for app ranking).
+			Referer: envDefault("OPENROUTER_REFERER", "https://github.com/magnusfroste/tokenizer"),
+			Title:   envDefault("OPENROUTER_TITLE", "tokenizer"),
 			Client:  &http.Client{Timeout: 60 * time.Second},
 			Timeout: 60 * time.Second,
 		}
@@ -292,6 +295,13 @@ func parseBoolEnv(s string) bool {
 	default:
 		return false
 	}
+}
+
+func envDefault(name, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func parseIntEnv(s string, fallback int) int {
