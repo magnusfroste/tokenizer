@@ -79,7 +79,9 @@ make lint
 
 `make smoke` är det systematiska, repeterbara sättet att verifiera "det vi har"
 (deterministiskt, utan credentials). För riktiga modeller: kör samma router med
-`OPENROUTER_API_KEY` satt och peka en klient mot den.
+`OPENROUTER_API_KEY` satt och peka en klient mot den — eller kör
+`make smoke-live`, som gör ett riktigt OpenRouter-anrop och verifierar svar +
+realiserad kostnad (hoppas över om nyckeln saknas).
 
 ## Mål
 

@@ -1,4 +1,4 @@
-.PHONY: build dev test test-unit test-integration test-eval test-policy test-regression eval-report smoke lint fmt vet tidy clean run run-mock migrate seed
+.PHONY: build dev test test-unit test-integration test-eval test-policy test-regression eval-report smoke smoke-live lint fmt vet tidy clean run run-mock migrate seed
 
 GO ?= go
 PSQL ?= psql
@@ -58,6 +58,11 @@ eval-report:
 # the full request lifecycle). Repeatable and credential-free.
 smoke:
 	./scripts/smoke.sh
+
+# Live smoke against OpenRouter (periodic real-provider validation). Skips when
+# OPENROUTER_API_KEY is unset.
+smoke-live:
+	./scripts/smoke-openrouter.sh
 
 lint: vet
 	@out=$$(gofmt -l . | grep -v '^vendor/' || true); \
