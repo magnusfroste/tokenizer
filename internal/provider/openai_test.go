@@ -333,3 +333,36 @@ func TestOpenAIAdapterBadJSONMapsToBadResponse(t *testing.T) {
 		t.Fatalf("expected bad response, got %v", err)
 	}
 }
+
+func TestOpenAIAdapterAttributionHeaders(t *testing.T) {
+	var referer, title string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		referer = r.Header.Get("HTTP-Referer")
+		title = r.Header.Get("X-Title")
+		_ = json.NewEncoder(w).Encode(openai.ChatResponse{ID: "x"})
+	}))
+	defer srv.Close()
+
+	req := func() *NormalizedModelRequest {
+		return &NormalizedModelRequest{Model: "m", Messages: []openai.Message{{Role: "user", Content: "hi"}}}
+	}
+
+	// Set → headers sent.
+	a := &OpenAIAdapter{BaseURL: srv.URL + "/v1", APIKey: "k", Referer: "https://example.test", Title: "tokenizer"}
+	if _, err := a.Complete(context.Background(), req()); err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if referer != "https://example.test" || title != "tokenizer" {
+		t.Fatalf("attribution headers not sent: referer=%q title=%q", referer, title)
+	}
+
+	// Unset → headers omitted (native OpenAI/Anthropic paths unaffected).
+	referer, title = "sentinel", "sentinel"
+	b := &OpenAIAdapter{BaseURL: srv.URL + "/v1", APIKey: "k"}
+	if _, err := b.Complete(context.Background(), req()); err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if referer != "" || title != "" {
+		t.Fatalf("attribution headers should be omitted when unset: referer=%q title=%q", referer, title)
+	}
+}

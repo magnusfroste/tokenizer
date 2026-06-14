@@ -26,9 +26,29 @@ type OpenAIAdapter struct {
 	APIKey  string
 	Client  *http.Client
 	Timeout time.Duration
+	// Referer and Title are optional attribution headers (HTTP-Referer / X-Title)
+	// recommended by OpenRouter; sent only when non-empty so native OpenAI/
+	// Anthropic endpoints are unaffected.
+	Referer string
+	Title   string
 }
 
 func (a *OpenAIAdapter) Name() string { return "openai" }
+
+// setCommonHeaders applies content-type, bearer auth and optional OpenRouter
+// attribution headers shared by the Complete and Stream paths.
+func (a *OpenAIAdapter) setCommonHeaders(httpReq *http.Request) {
+	httpReq.Header.Set("Content-Type", "application/json")
+	if a.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+a.APIKey)
+	}
+	if a.Referer != "" {
+		httpReq.Header.Set("HTTP-Referer", a.Referer)
+	}
+	if a.Title != "" {
+		httpReq.Header.Set("X-Title", a.Title)
+	}
+}
 
 func (a *OpenAIAdapter) Complete(ctx context.Context, req *NormalizedModelRequest) (*openai.ChatResponse, error) {
 	if a.Timeout > 0 {
@@ -49,10 +69,7 @@ func (a *OpenAIAdapter) Complete(ctx context.Context, req *NormalizedModelReques
 	if err != nil {
 		return nil, fmt.Errorf("openai adapter: build request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if a.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+a.APIKey)
-	}
+	a.setCommonHeaders(httpReq)
 
 	client := a.Client
 	if client == nil {
@@ -107,11 +124,8 @@ func (a *OpenAIAdapter) Stream(ctx context.Context, req *NormalizedModelRequest)
 		}
 		return nil, fmt.Errorf("openai adapter: build stream request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	a.setCommonHeaders(httpReq)
 	httpReq.Header.Set("Accept", "text/event-stream")
-	if a.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+a.APIKey)
-	}
 
 	client := a.Client
 	if client == nil {
