@@ -4,6 +4,61 @@ Detta paket är ett byggunderlag för en tjänst som routar varje prompt till r�
 
 Arbetsnamn i dokumenten: **model-router**.
 
+## Kom igång (quickstart)
+
+Kräver Go 1.22+.
+
+### Snabbast — lokalt, utan databas (in-memory)
+
+Routern kör hela fast-path-vägen (auth, classifier, policy, routing, fallback)
+med in-memory-state, så du behöver varken Postgres eller Redis för att prova den.
+
+```bash
+make build
+
+# Terminal 1: mock-provider (svarar som en OpenAI-kompatibel modell)
+MOCK_PROVIDER_ADDR=:18080 ./bin/mock-provider
+
+# Terminal 2: routern
+LOCAL_API_KEY=local_router_key ./bin/router
+```
+
+Testa den:
+
+```bash
+# Chat completion (model: auto → routern väljer modell)
+curl -s -X POST http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer local_router_key" \
+  -d '{"model":"auto","messages":[{"role":"user","content":"write a git commit message"}]}'
+
+# Routingbeslut utan provideranrop (dry-run, med förklaringar)
+./bin/routerctl -url http://localhost:8080 -key local_router_key \
+  -message "review this auth change for security"
+```
+
+Andra endpoints: `GET /healthz`, `GET /readyz`, `GET /metrics`,
+`GET /router/dashboard`, `POST /router/decision`.
+
+### Fullt — med Postgres/Redis
+
+```bash
+cp .env.example .env
+docker compose up -d postgres redis mock-provider
+make migrate   # applicerar alla db/migrations/*.sql i ordning
+make seed
+make dev       # go run ./cmd/router
+```
+
+### Tester och evals
+
+```bash
+make test          # unit + integration (race)
+make test-eval     # eval smoke
+make test-policy   # policy golden-cases
+make eval-report   # skriver eval-report/report.{json,txt}
+make lint
+```
+
 ## Mål
 
 Bygg en produktionsduglig tjänst som kan:
@@ -24,17 +79,20 @@ Detta är inte bara en “billigaste modell”-proxy. Routern ska optimera för 
 rätt kvalitet + rätt kostnad + rätt latency + rätt policy + rätt fallback
 ```
 
-## Föreslagen stack för MVP
+## Stack (implementerad)
 
-- API/proxy: FastAPI, Hono eller Go/Fiber.
-- Providerlager: LiteLLM eller egen adaptermodul.
-- Databas: Postgres.
-- Snabb state/cache: Redis.
-- Eventlogg: Postgres initialt; ClickHouse senare vid hög volym.
-- Observability: OpenTelemetry, Prometheus, Grafana.
-- Dashboard: Next.js eller intern adminpanel.
-- Auth: API keys med tenant- och project-scope.
-- Deployment: Docker Compose för dev, Kubernetes/Fly/Render/AWS ECS för prod.
+Den ursprungliga MVP-skissen vägde FastAPI/LiteLLM mot Go; beslutet blev **Go**
+(se `DECISION_LOG.md`, 2026-05-19). Nuvarande implementation:
+
+- API/proxy: **Go 1.22**, stdlib `net/http` (1.22 `ServeMux`), `log/slog`.
+- Providerlager: egna adaptrar (`internal/provider`); `mock-provider` för dev.
+- Databas: Postgres (schema i `db/migrations/`).
+- Snabb state/cache: in-memory idag (API-key/policy/health/decision-cache);
+  Redis enligt `docker-compose.yml` för full uppsättning.
+- Eventlogg: async event queue → strukturerad logg + Prometheus-metrics.
+- Observability: Prometheus (`/metrics`) + inbyggd dashboard.
+- Auth: API keys (hashade) med tenant/project-scope + RBAC.
+- Deployment: Docker Compose för dev.
 
 ## Rekommenderad läsordning
 
