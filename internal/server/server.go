@@ -92,6 +92,13 @@ func New(cfg Config) http.Handler {
 	mux.Handle("POST /v1/chat/completions",
 		auth.Middleware(cfg.KeyStore)(auth.RequireScope(auth.ScopeChatCompletions)(chat)))
 
+	// OpenAI-compatible model discovery. Requires a valid key (like OpenAI) but
+	// no granular scope — listing models is read-only and benign.
+	if cfg.Engine != nil {
+		mux.Handle("GET /v1/models",
+			auth.Middleware(cfg.KeyStore)(ModelsHandler(cfg.Engine)))
+	}
+
 	if cfg.Engine != nil {
 		decision := DecisionHandler(DecisionOptions{
 			Engine:      cfg.Engine,
