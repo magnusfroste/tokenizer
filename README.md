@@ -39,6 +39,19 @@ curl -s -X POST http://localhost:8080/v1/chat/completions \
 Andra endpoints: `GET /healthz`, `GET /readyz`, `GET /metrics`,
 `GET /router/dashboard`, `POST /router/decision`.
 
+### Mot riktiga modeller via OpenRouter
+
+Sätt `OPENROUTER_API_KEY` så routar tjänsten mot [OpenRouter](https://openrouter.ai)
+(ett OpenAI-kompatibelt API) istället för mocken — riktiga modellsvar, riktig
+streaming, riktig kostnad. Mock-providern är default när nyckeln är tom.
+
+```bash
+OPENROUTER_API_KEY=sk-or-... LOCAL_API_KEY=local_router_key ./bin/router
+```
+
+Tier-profilerna (`cheap`/`balanced`/`premium`) mappas till OpenRouter-modeller i
+`internal/registry/openrouter.go` — justera modell-slugs och priser där.
+
 ### Fullt — med Postgres/Redis
 
 ```bash
