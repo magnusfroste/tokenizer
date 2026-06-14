@@ -16,13 +16,13 @@ build:
 	$(GO) build -o $(CTL_BIN) ./cmd/routerctl
 
 run: build
-	$(ROUTER_BIN)
+	@set -a; [ -f .env ] && . ./.env || true; set +a; $(ROUTER_BIN)
 
 run-mock: build
 	$(MOCK_BIN)
 
 dev:
-	$(GO) run ./cmd/router
+	@set -a; [ -f .env ] && . ./.env || true; set +a; $(GO) run ./cmd/router
 
 migrate:
 	@for f in $$(ls db/migrations/*.sql | sort); do \
