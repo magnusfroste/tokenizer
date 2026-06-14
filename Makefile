@@ -1,4 +1,4 @@
-.PHONY: build dev test test-unit test-integration test-eval test-policy test-regression eval-report lint fmt vet tidy clean run run-mock migrate seed
+.PHONY: build dev test test-unit test-integration test-eval test-policy test-regression eval-report smoke lint fmt vet tidy clean run run-mock migrate seed
 
 GO ?= go
 PSQL ?= psql
@@ -53,6 +53,11 @@ test-regression:
 
 eval-report:
 	$(GO) run ./cmd/eval-report -out eval-report
+
+# End-to-end smoke test against the mock provider (boots mock + router, exercises
+# the full request lifecycle). Repeatable and credential-free.
+smoke:
+	./scripts/smoke.sh
 
 lint: vet
 	@out=$$(gofmt -l . | grep -v '^vendor/' || true); \
