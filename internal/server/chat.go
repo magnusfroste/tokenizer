@@ -162,6 +162,12 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 					writeError(w, status, dec.BlockCode, dec.BlockReason)
 					return
 				}
+				if errors.Is(decErr, engine.ErrModelNotFound) {
+					// Client pinned a model that does not exist — a client error,
+					// not an upstream routing failure.
+					writeError(w, http.StatusNotFound, "model_not_found", decErr.Error())
+					return
+				}
 				writeError(w, http.StatusBadGateway, "no_route", decErr.Error())
 				return
 			}
