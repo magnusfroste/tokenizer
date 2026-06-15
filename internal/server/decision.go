@@ -73,6 +73,10 @@ func DecisionHandler(opts DecisionOptions) http.HandlerFunc {
 				_ = json.NewEncoder(w).Encode(decisionResponse{RouteDecision: dec})
 				return
 			}
+			if errors.Is(err, engine.ErrModelNotFound) {
+				writeError(w, http.StatusNotFound, "model_not_found", err.Error())
+				return
+			}
 			writeError(w, http.StatusUnprocessableEntity, "no_route", err.Error())
 			return
 		}

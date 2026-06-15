@@ -15,9 +15,10 @@ import (
 const conservativeConfidenceThreshold = 0.5
 
 var (
-	ErrNoRoute  = errors.New("engine: no route found")
-	ErrBlocked  = errors.New("engine: request blocked by policy")
-	ErrDisabled = errors.New("engine: routing disabled")
+	ErrNoRoute       = errors.New("engine: no route found")
+	ErrBlocked       = errors.New("engine: request blocked by policy")
+	ErrDisabled      = errors.New("engine: routing disabled")
+	ErrModelNotFound = errors.New("engine: model not found in registry")
 )
 
 // Engine is the stateless routing decision engine.
@@ -197,7 +198,7 @@ func decidePinned(
 		// Fall back to searching by ProviderModelID.
 		found := findByProviderModelID(snap, modelRef)
 		if found == nil {
-			return RouteDecision{}, fmt.Errorf("%w: %s %q not found in registry", ErrNoRoute, source, modelRef)
+			return RouteDecision{}, fmt.Errorf("%w: %s %q not found in registry", ErrModelNotFound, source, modelRef)
 		}
 		model = *found
 	}
