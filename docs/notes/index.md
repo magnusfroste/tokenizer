@@ -4,7 +4,7 @@ This index is a retrieval map for reusable project lessons. Open only notes rele
 
 ## High-Signal Recurring Lessons
 
-- 2026-05-19 - [Streaming Adapter Compatibility](2026-05-19-streaming-adapter-compatibility.md): open when changing provider interfaces, streaming adapters, SSE framing, or first-token fallback boundaries.
+- 2026-05-19 - [Streaming Adapter Compatibility](2026-05-19-streaming-adapter-compatibility.md): open when changing provider interfaces, streaming adapters, SSE framing, first-token fallback boundaries, or per-attempt stream cancellation.
 - 2026-05-19 - [Immutable Registry Snapshots](2026-05-19-immutable-registry-snapshots.md): open when changing registry/profile snapshot fields, lookup helpers, capability filters, or health overlays.
 - 2026-05-19 - [Context Processor Timeout Isolation](2026-05-19-context-processor-timeout-isolation.md): open when adding mutable request processors, nested request cloning, timeout handling, or fail-open pipeline behavior.
 - 2026-05-19 - [Job Descriptor Trust Boundaries](2026-05-19-job-descriptor-trust-boundaries.md): open when mapping client metadata/headers into routing, policy, classifier, or descriptor logging fields.
@@ -34,7 +34,7 @@ This index is a retrieval map for reusable project lessons. Open only notes rele
 
 ## Providers
 
-- 2026-05-19 - [Streaming Adapter Compatibility](2026-05-19-streaming-adapter-compatibility.md): optional streaming provider interface; open when adding adapters, stream support, or unsupported-stream behavior.
+- 2026-05-19 - [Streaming Adapter Compatibility](2026-05-19-streaming-adapter-compatibility.md): optional streaming provider interface; open when adding adapters, stream support, unsupported-stream behavior, or timeout fallback cancellation.
 - 2026-06-12 - [System Prompt Adapter Boundaries](2026-06-12-system-prompt-adapter-boundaries.md): existing `system` messages are the adapter surface; open when adding model-specific prompt rewrites or provider-side prompt shaping.
 
 ## Auth
@@ -61,7 +61,7 @@ This index is a retrieval map for reusable project lessons. Open only notes rele
 - 2026-05-19 - [Classifier Keyword Boundaries](2026-05-19-classifier-keyword-boundaries.md): deterministic in-memory keyword matching; prefer bounded scans and explicit terms over broad prompt-derived outputs.
 - 2026-06-12 - [Decision Comparison Determinism](2026-06-12-decision-comparison-determinism.md): micro-USD diff aggregation and route-field-only comparisons keep reporting deterministic without touching the fast path.
 - 2026-06-12 - [Cost Quality Frontier Determinism](2026-06-12-cost-quality-frontier-determinism.md): keep frontier scoring offline, smoothed, and tie-stable when comparing models per task class.
-- 2026-05-19 - [Streaming Adapter Compatibility](2026-05-19-streaming-adapter-compatibility.md): first emitted stream chunk is the fallback boundary; do not retry after data is flushed.
+- 2026-05-19 - [Streaming Adapter Compatibility](2026-05-19-streaming-adapter-compatibility.md): first emitted stream chunk is the fallback boundary; cancel abandoned attempts on pre-token fallback and do not retry after data is flushed.
 - 2026-05-19 - [Immutable Registry Snapshots](2026-05-19-immutable-registry-snapshots.md): clone map/slice metadata on snapshot ingress and egress while keeping lookups deterministic and in-memory.
 - 2026-05-19 - [Context Processor Timeout Isolation](2026-05-19-context-processor-timeout-isolation.md): hard timeouts do not stop goroutines; deeply clone mutable request state and commit only on successful completion.
 - 2026-06-12 - [System Prompt Adapter Boundaries](2026-06-12-system-prompt-adapter-boundaries.md): mutate cloned system messages only after a match so disabled and default paths stay fast and unchanged.
@@ -77,7 +77,7 @@ This index is a retrieval map for reusable project lessons. Open only notes rele
 
 | Date | Title | Retrieval cues |
 | --- | --- | --- |
-| 2026-05-19 | [Streaming Adapter Compatibility](2026-05-19-streaming-adapter-compatibility.md) | provider, streaming, SSE, optional interface, first token boundary |
+| 2026-05-19 | [Streaming Adapter Compatibility](2026-05-19-streaming-adapter-compatibility.md) | provider, streaming, SSE, optional interface, first token boundary, cancellation |
 | 2026-05-19 | [Immutable Registry Snapshots](2026-05-19-immutable-registry-snapshots.md) | registry, snapshot, map clone, slice clone, capability filter, health overlay |
 | 2026-05-19 | [Backlog Triage State Sync](2026-05-19-backlog-triage-state-sync.md) | issue state, triage labels, implementation closeouts, .ai/tasks.json, next task drift |
 | 2026-05-19 | [Context Processor Timeout Isolation](2026-05-19-context-processor-timeout-isolation.md) | contextproc, hard timeout, goroutine, race, nested metadata/tools clone |

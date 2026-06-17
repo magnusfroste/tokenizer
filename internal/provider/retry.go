@@ -72,12 +72,20 @@ func (r *RetryAdapter) Stream(ctx context.Context, req *NormalizedModelRequest) 
 			defer cancel()
 			inner, err := sa.Stream(ctx, req)
 			if err != nil {
-				ch <- StreamChunk{Err: err}
+				select {
+				case ch <- StreamChunk{Err: err}:
+				case <-ctx.Done():
+				}
 				close(ch)
 				return
 			}
 			for chunk := range inner {
-				ch <- chunk
+				select {
+				case ch <- chunk:
+				case <-ctx.Done():
+					close(ch)
+					return
+				}
 				if chunk.Done || chunk.Err != nil {
 					break
 				}

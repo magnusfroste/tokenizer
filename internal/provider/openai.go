@@ -166,7 +166,9 @@ func (a *OpenAIAdapter) Stream(ctx context.Context, req *NormalizedModelRequest)
 					if chunk.Done {
 						doneSeen = true
 					}
-					chunks <- chunk
+					if !sendStreamChunk(ctx, chunks, chunk) {
+						return
+					}
 					if chunk.Done {
 						return
 					}
@@ -177,15 +179,24 @@ func (a *OpenAIAdapter) Stream(ctx context.Context, req *NormalizedModelRequest)
 			}
 			if errors.Is(err, io.EOF) {
 				if !doneSeen {
-					chunks <- StreamChunk{Err: fmt.Errorf("%w: stream ended before done frame", ErrStreamInterrupted)}
+					sendStreamChunk(ctx, chunks, StreamChunk{Err: fmt.Errorf("%w: stream ended before done frame", ErrStreamInterrupted)})
 				}
 				return
 			}
-			chunks <- StreamChunk{Err: fmt.Errorf("%w: read stream: %v", ErrStreamInterrupted, err)}
+			sendStreamChunk(ctx, chunks, StreamChunk{Err: fmt.Errorf("%w: read stream: %v", ErrStreamInterrupted, err)})
 			return
 		}
 	}()
 	return chunks, nil
+}
+
+func sendStreamChunk(ctx context.Context, chunks chan<- StreamChunk, chunk StreamChunk) bool {
+	select {
+	case chunks <- chunk:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func parseSSEDataLine(line string) (StreamChunk, bool) {

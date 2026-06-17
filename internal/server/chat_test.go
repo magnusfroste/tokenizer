@@ -66,6 +66,21 @@ func (f *fakeStreamingAdapter) Stream(ctx context.Context, req *provider.Normali
 	return chunks, nil
 }
 
+type blockingStreamingAdapter struct {
+	fakeAdapter
+	canceled chan struct{}
+}
+
+func (f *blockingStreamingAdapter) Stream(ctx context.Context, req *provider.NormalizedModelRequest) (<-chan provider.StreamChunk, error) {
+	chunks := make(chan provider.StreamChunk)
+	go func() {
+		<-ctx.Done()
+		close(f.canceled)
+		close(chunks)
+	}()
+	return chunks, nil
+}
+
 func postChat(t *testing.T, h http.Handler, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	buf, err := json.Marshal(body)
@@ -628,6 +643,54 @@ func TestChat_StreamInterruptedAfterFirstChunkWritesErrorEvent(t *testing.T) {
 	}
 	if !strings.Contains(body, "event: error") || !strings.Contains(body, "stream_interrupted") {
 		t.Fatalf("expected SSE error marker in body %q", body)
+	}
+}
+
+func TestStreamWithFallbackCancelsTimedOutCandidate(t *testing.T) {
+	oldTimeout := firstTokenTimeout
+	firstTokenTimeout = 5 * time.Millisecond
+	t.Cleanup(func() { firstTokenTimeout = oldTimeout })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	first := &blockingStreamingAdapter{
+		canceled: make(chan struct{}),
+	}
+	second := &fakeStreamingAdapter{
+		streamChunks: []provider.StreamChunk{
+			{Data: []byte(`{"id":"chunk_2"}`)},
+			{Done: true},
+		},
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
+	streamWithFallback(
+		rec,
+		req,
+		[]streamCandidate{
+			{adapter: first, providerModelID: "provider-slow", modelID: "slow-model", providerID: "slow"},
+			{adapter: second, providerModelID: "provider-fast", modelID: "fast-model", providerID: "fast"},
+		},
+		&provider.NormalizedModelRequest{Model: "auto"},
+		nil,
+		nil,
+		nil,
+		"req_stream_timeout",
+		attemptMeta{},
+	)
+
+	select {
+	case <-first.canceled:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timed-out streaming candidate context was not canceled")
+	}
+	if got := rec.Header().Get("X-Router-Selected-Model"); got != "fast-model" {
+		t.Fatalf("selected model = %q, want fast-model", got)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `data: {"id":"chunk_2"}`) {
+		t.Fatalf("fallback stream body missing second candidate chunk: %q", body)
 	}
 }
 

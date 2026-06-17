@@ -32,6 +32,8 @@ import (
 // attempting the next fallback provider.
 const firstTokenTimeoutMS = 10_000
 
+var firstTokenTimeout = firstTokenTimeoutMS * time.Millisecond
+
 // ChatOptions configures the chat completions handler.
 type ChatOptions struct {
 	ContextPipeline        *contextproc.Pipeline
@@ -317,22 +319,25 @@ func streamWithFallback(
 		req := normalized.Clone()
 		req.Model = c.providerModelID
 		attemptStart := time.Now()
+		attemptCtx, cancelAttempt := context.WithCancel(r.Context())
 
-		chunks, err := c.adapter.Stream(r.Context(), req)
+		chunks, err := c.adapter.Stream(attemptCtx, req)
 		if err != nil {
+			cancelAttempt()
 			logStreamAttempt(r, logger, c, i, "stream_open_error", err)
 			recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), err)
 			continue
 		}
 
 		// Wait for the first chunk within the first-token timeout.
-		timer := time.NewTimer(firstTokenTimeoutMS * time.Millisecond)
+		timer := time.NewTimer(firstTokenTimeout)
 		var firstChunk provider.StreamChunk
 		var gotFirst bool
 		select {
 		case chunk, chanOk := <-chunks:
 			timer.Stop()
 			if !chanOk {
+				cancelAttempt()
 				logStreamAttempt(r, logger, c, i, "stream_channel_closed", nil)
 				recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), fmt.Errorf("channel closed"))
 				continue
@@ -340,30 +345,25 @@ func streamWithFallback(
 			firstChunk = chunk
 			gotFirst = true
 		case <-timer.C:
+			cancelAttempt()
 			logStreamAttempt(r, logger, c, i, "first_token_timeout", nil)
 			recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), provider.ErrProviderTimeout)
 			continue
 		case <-r.Context().Done():
 			timer.Stop()
+			cancelAttempt()
 			return
 		}
 
 		if !gotFirst {
+			cancelAttempt()
 			continue
 		}
 
 		firstTokenMs := time.Since(attemptStart).Milliseconds()
 
-		// First token received — write headers and stream to completion.
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("X-Router-Selected-Model", c.modelID)
-		w.Header().Set("X-Router-First-Token-Sent", "true")
-		w.Header().Set("X-Router-First-Token-Ms", strconv.FormatInt(firstTokenMs, 10))
-		started := time.Now()
-
 		if firstChunk.Err != nil {
+			cancelAttempt()
 			if i+1 < len(candidates) {
 				logStreamAttempt(r, logger, c, i, "first_chunk_error", firstChunk.Err)
 				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), firstChunk.Err)
@@ -374,10 +374,21 @@ func streamWithFallback(
 			writeError(w, status, code, firstChunk.Err.Error())
 			return
 		}
+
+		// First token received — write headers and stream to completion.
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Router-Selected-Model", c.modelID)
+		w.Header().Set("X-Router-First-Token-Sent", "true")
+		w.Header().Set("X-Router-First-Token-Ms", strconv.FormatInt(firstTokenMs, 10))
+		started := time.Now()
+
 		if firstChunk.Done {
 			writeSSEData(w, []byte("[DONE]"))
 			flusher.Flush()
 			recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), nil)
+			cancelAttempt()
 			return
 		}
 		if len(firstChunk.Data) > 0 {
@@ -392,6 +403,7 @@ func streamWithFallback(
 				flusher.Flush()
 				logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), chunk.Err)
 				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), chunk.Err)
+				cancelAttempt()
 				return
 			}
 			if chunk.Done {
@@ -399,6 +411,7 @@ func streamWithFallback(
 				flusher.Flush()
 				logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), nil)
 				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), nil)
+				cancelAttempt()
 				return
 			}
 			if len(chunk.Data) > 0 {
@@ -408,6 +421,7 @@ func streamWithFallback(
 		}
 		logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), nil)
 		recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), nil)
+		cancelAttempt()
 		return
 	}
 
