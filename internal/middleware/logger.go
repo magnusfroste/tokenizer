@@ -28,6 +28,16 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 	return s.ResponseWriter.Write(b)
 }
 
+// Flush forwards to the underlying ResponseWriter's Flusher so that wrapping
+// requests in this recorder does not disable server-sent-event streaming. The
+// chat completions handler type-asserts http.Flusher; without this the streaming
+// path fails with "response writer does not support streaming".
+func (s *statusRecorder) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // Logger emits one structured log line per request after the handler returns.
 // Status, duration and request id are included; verb-specific bodies are not.
 func Logger(log *slog.Logger) func(http.Handler) http.Handler {
