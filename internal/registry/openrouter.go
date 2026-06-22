@@ -38,6 +38,7 @@ func OpenRouterDefinition() Definition {
 					Streaming:  true,
 					ToolCalls:  true,
 					JSONSchema: true,
+					Vision:     true,
 				},
 				Cost: CostMetadata{
 					Currency:                    "USD",
@@ -62,6 +63,7 @@ func OpenRouterDefinition() Definition {
 					ToolCalls:   true,
 					JSONSchema:  true,
 					LongContext: true,
+					Vision:      true,
 				},
 				Cost: CostMetadata{
 					Currency:                    "USD",
@@ -85,6 +87,7 @@ func OpenRouterDefinition() Definition {
 					ToolCalls:   true,
 					JSONSchema:  true,
 					LongContext: true,
+					Vision:      true,
 				},
 				Cost: CostMetadata{
 					Currency:                    "USD",
