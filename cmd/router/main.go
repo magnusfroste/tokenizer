@@ -189,6 +189,7 @@ func main() {
 		DecisionCache:              decisionCache,
 		PremiumInputMicrosPerMTok:  premInMicros,
 		PremiumOutputMicrosPerMTok: premOutMicros,
+		DashboardPassword:          strings.TrimSpace(os.Getenv("ROUTER_DASHBOARD_PASSWORD")),
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")

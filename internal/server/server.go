@@ -66,6 +66,11 @@ type Config struct {
 	// dashboard "saved vs all-premium" baseline. Optional.
 	PremiumInputMicrosPerMTok  int64
 	PremiumOutputMicrosPerMTok int64
+
+	// DashboardPassword, when set, gates the dashboard behind browser-friendly
+	// HTTP Basic Auth instead of the Bearer + admin-role gate. Lets you open the
+	// dashboard URL directly and log in.
+	DashboardPassword string
 }
 
 func New(cfg Config) http.Handler {
@@ -132,10 +137,16 @@ func New(cfg Config) http.Handler {
 		PremiumInputMicrosPerMTok:  cfg.PremiumInputMicrosPerMTok,
 		PremiumOutputMicrosPerMTok: cfg.PremiumOutputMicrosPerMTok,
 	})
-	mux.Handle("GET /router/dashboard",
-		auth.Middleware(cfg.KeyStore)(auth.RequireRole(auth.RoleAdmin)(http.HandlerFunc(htmlH))))
-	mux.Handle("GET /router/dashboard/data",
-		auth.Middleware(cfg.KeyStore)(auth.RequireRole(auth.RoleAdmin)(http.HandlerFunc(dataH))))
+	// When a dashboard password is set, gate behind browser-friendly Basic Auth
+	// so the URL can be opened directly; otherwise keep the Bearer + admin gate.
+	dashGuard := func(h http.HandlerFunc) http.Handler {
+		if cfg.DashboardPassword != "" {
+			return dashboardBasicAuth(cfg.DashboardPassword, http.HandlerFunc(h))
+		}
+		return auth.Middleware(cfg.KeyStore)(auth.RequireRole(auth.RoleAdmin)(http.HandlerFunc(h)))
+	}
+	mux.Handle("GET /router/dashboard", dashGuard(htmlH))
+	mux.Handle("GET /router/dashboard/data", dashGuard(dataH))
 
 	return middleware.RequestID(middleware.Logger(cfg.Logger)(mux))
 }
