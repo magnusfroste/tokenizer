@@ -21,6 +21,9 @@ services:
     restart: unless-stopped
     ports:
       - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8080}:8080"
+    volumes:
+      # Persists spend/savings across restarts & redeploys (ROUTER_DATA_DIR).
+      - ./data:/data
     environment:
       - ROUTER_ADDR=:8080
       - LOG_LEVEL=${LOG_LEVEL:-info}
@@ -38,6 +41,12 @@ services:
       - ROUTER_RETENTION_DAYS=${ROUTER_RETENTION_DAYS:-30}
       # --- Incident lever: route uncertain classifications at a raised tier. ---
       - ROUTER_CONSERVATIVE_MODE=${ROUTER_CONSERVATIVE_MODE:-false}
+      # --- Persistence: spend/savings survive restart when this points at the
+      #     mounted volume above. ---
+      - ROUTER_DATA_DIR=${ROUTER_DATA_DIR:-/data}
+      # --- Dashboard: set a password to open /router/dashboard in a browser
+      #     (HTTP Basic Auth). Leave blank to keep the Bearer + admin gate. ---
+      - ROUTER_DASHBOARD_PASSWORD=${ROUTER_DASHBOARD_PASSWORD:-}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 30s

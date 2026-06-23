@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -125,6 +126,19 @@ func main() {
 	// Observability: health tracker, spend tracker, event queue.
 	healthTracker := health.New()
 	spendTracker := spend.New()
+	// Spend/savings persistence (ISSUE-067): when ROUTER_DATA_DIR is set, the
+	// spend aggregates are loaded at startup and periodically flushed to a file
+	// on that volume so the dashboard's savings survive restarts/redeploys.
+	spendFile := ""
+	if dir := strings.TrimSpace(os.Getenv("ROUTER_DATA_DIR")); dir != "" {
+		spendFile = filepath.Join(dir, "spend.json")
+		if snap, err := spend.LoadJSON(spendFile); err != nil {
+			logger.Warn("could not load persisted spend", "err", err, "file", spendFile)
+		} else {
+			spendTracker.Restore(snap)
+			logger.Info("loaded persisted spend", "file", spendFile)
+		}
+	}
 	outcomeStore := outcomes.NewStore()
 	eventQueue := eventlog.NewQueue(0)
 	comparisonTracker := eventlog.NewComparisonTracker(0)
@@ -156,6 +170,24 @@ func main() {
 	// Start the queue worker in the background.
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	go eventQueue.Run(workerCtx, combinedHandler, logger)
+
+	// Periodically flush spend aggregates so savings survive a crash/redeploy.
+	if spendFile != "" {
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if err := spendTracker.SaveJSON(spendFile); err != nil {
+						logger.Warn("spend flush failed", "err", err)
+					}
+				case <-workerCtx.Done():
+					return
+				}
+			}
+		}()
+	}
 
 	// Retention/privacy settings (ISSUE-045). Prompt logging is off unless
 	// ROUTER_PROMPT_LOGGING is explicitly enabled.
@@ -221,6 +253,13 @@ func main() {
 		logger.Error("shutdown error", "err", err)
 	}
 	workerCancel() // drain event queue gracefully
+	if spendFile != "" {
+		if err := spendTracker.SaveJSON(spendFile); err != nil {
+			logger.Error("final spend flush failed", "err", err)
+		} else {
+			logger.Info("persisted spend on shutdown", "file", spendFile)
+		}
+	}
 }
 
 func loadRuntimePolicyCache(snapshot *registry.Snapshot, path string) (*policy.Cache, error) {
