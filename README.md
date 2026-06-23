@@ -102,6 +102,39 @@ Minimum: `LOCAL_API_KEY` (stark secret) och — för riktig provider —
 att spend/savings ska överleva omstart. Detaljer:
 [`01-architecture/14-deployment-topology.md`](01-architecture/14-deployment-topology.md).
 
+## Deploy-checklista (EasyPanel / Docker)
+
+### Före deploy
+- [ ] Generera en stark `LOCAL_API_KEY` — `openssl rand -hex 24` (aldrig dev-defaulten `local_router_key`).
+- [ ] Ha din `OPENROUTER_API_KEY` redo (annars körs mock-providern).
+- [ ] Välj ett `ROUTER_DASHBOARD_PASSWORD` (för att öppna dashboarden i browser).
+- [ ] Bestäm `ROUTER_BUDGET_USD` (spend-tak; `0` = av).
+
+### Deploy
+- [ ] Skapa en **Compose**-service i EasyPanel mot detta repo → `deploy/docker-compose.yml`.
+- [ ] Klistra in env i UI:t (se `deploy/example.env`): `LOCAL_API_KEY`, `OPENROUTER_API_KEY`, `ROUTER_DASHBOARD_PASSWORD`, ev. `ROUTER_BUDGET_USD`.
+- [ ] Exponera container-port **8080**; healthcheck-path `/healthz`.
+- [ ] Volymen `./data:/data` (i compose) är monterad så spend/savings överlever redeploy.
+- [ ] Koppla en domän (EasyPanel sköter TLS).
+
+### Verifiera efter deploy
+- [ ] `GET https://<domän>/healthz` → `200`.
+- [ ] Ett riktigt anrop routar och svarar:
+  ```bash
+  curl -s -D - https://<domän>/v1/chat/completions \
+    -H "Authorization: Bearer <LOCAL_API_KEY>" \
+    -d '{"model":"auto","messages":[{"role":"user","content":"reply ok"}]}' \
+    | grep -i x-router-
+  ```
+  → `X-Router-Selected-Model` + `X-Router-Cost-Usd` i svaret.
+- [ ] Öppna `https://<domän>/router/dashboard` → logga in (Basic Auth) → **savings-headline syns**.
+- [ ] Redeploy → savings finns kvar (persistens funkar).
+
+### Säkerhet & drift
+- [ ] Inga default-credentials kvar; secrets bara i EasyPanels env, aldrig i git/imagen.
+- [ ] Peka klienter på `https://<domän>/v1` med `model: "auto"`.
+- [ ] (Valfritt) `ROUTER_CONSERVATIVE_MODE=true` som incident-spak vid behov.
+
 ## Mål
 
 Bygg en produktionsduglig tjänst som kan:
