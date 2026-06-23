@@ -72,6 +72,9 @@ func ClassifyTask(features Features, messages []openai.Message) TaskClassificati
 	case hasSimpleCodeEditSignal(ctx, features):
 		signals.add("edit_keyword")
 		return taskResult(taskSimpleCodeEdit, 0.82, signals.values())
+	case hasCodeGenSignal(ctx):
+		signals.add("codegen_keyword")
+		return taskResult(taskSimpleCodeEdit, 0.80, signals.values())
 	case hasSimpleShellSignal(ctx, features):
 		signals.add("shell_keyword")
 		return taskResult(taskSimpleShell, 0.76, signals.values())
@@ -224,10 +227,34 @@ func hasSummarizationSignal(ctx taskContext) bool {
 // over-escalating a doc task to security_review. Deliberately uses specific doc
 // nouns/verbs, not broad words like "update"/"add", to avoid false positives.
 func hasDocIntentSignal(ctx taskContext) bool {
+	// Use "documentation"/verb-phrases, not bare "document": the noun ("HTML
+	// document", "document.getElementById") is not a documentation intent and
+	// must not suppress code-generation tasks. See classifier-codegen-gap.
 	return containsAnyTerm(ctx.lower, []string{
-		"document", "documentation", "docs", "docstring", "doc comment",
+		"documentation", "docs", "docstring", "doc comment",
+		"document this", "document the", "documenting",
 		"readme", "changelog", "release notes", "explain", "describe",
 	})
+}
+
+// hasCodeGenSignal detects a request to generate new code from scratch (build /
+// create / write a program), as opposed to editing or debugging existing code.
+// Such requests otherwise fall through to simple_chat → cheap; routing them to a
+// coding-capable tier matches intent. Requires both an action verb and a
+// code-specific object to avoid catching prose ("write a blog post").
+func hasCodeGenSignal(ctx taskContext) bool {
+	verb := containsAnyTerm(ctx.lower, []string{
+		"create", "build", "write", "implement", "generate", "develop", "scaffold", "code up", "make a", "make me",
+	})
+	object := containsAnyTerm(ctx.lower, []string{
+		"app", "application", "script", "program", "function", "class", "component",
+		"api", "endpoint", "rest api", "website", "web page", "webpage", "web app",
+		"game", "cli", "command-line tool", "module", "library", "server", "parser",
+		"algorithm", "bot", "crawler", "scraper", "microservice", "html", "css",
+		"javascript", "typescript", "react", "vue", "svelte", "python script",
+		"go program", "sql query", "regex", "unit tests", "data structure",
+	})
+	return verb && object
 }
 
 func hasSimpleCodeEditSignal(ctx taskContext, features Features) bool {
@@ -237,7 +264,14 @@ func hasSimpleCodeEditSignal(ctx taskContext, features Features) bool {
 	if !features.RequiresCode {
 		return false
 	}
-	return containsAnyTerm(ctx.lower, []string{"fix", "change", "edit", "update", "refactor", "rename", "add", "remove", "modify"})
+	// These verbs only classify as a code edit when code was already detected
+	// (RequiresCode, checked above), so broadening them adds no false positives —
+	// it just keeps code-with-clear-intent from falling through to
+	// unknown_high_risk. See classifier-codegen-gap.
+	return containsAnyTerm(ctx.lower, []string{
+		"fix", "change", "edit", "update", "refactor", "rename", "add", "remove", "modify",
+		"convert", "optimize", "port", "rewrite", "simplify", "clean up", "improve", "review",
+	})
 }
 
 func hasSimpleShellSignal(ctx taskContext, features Features) bool {
@@ -256,6 +290,9 @@ func hasStrongTaskIntent(ctx taskContext, features Features) bool {
 		return true
 	}
 	if features.RequiresCode || hasAnyKeyword(features.Keywords, "debug", "code") {
+		return true
+	}
+	if hasCodeGenSignal(ctx) {
 		return true
 	}
 	return hasSummarizationSignal(ctx) ||

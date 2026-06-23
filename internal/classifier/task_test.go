@@ -163,6 +163,44 @@ func TestClassifyTask_Issue066_IntentAwareSecurity(t *testing.T) {
 	}
 }
 
+// TestClassifyTask_CodeGenAndDocNoun covers two dogfooding findings: code
+// generation from scratch must not fall to simple_chat, and the noun "document"
+// (HTML document) must not trip documentation intent.
+func TestClassifyTask_CodeGenAndDocNoun(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantTask router.TaskType
+	}{
+		// Code generation → a code task (not simple_chat).
+		{"snake with document noun", "create an HTML snake game and respond with only the raw HTML document", router.TaskSimpleCodeEdit},
+		{"snake plain", "create an HTML snake game with canvas and arrow keys", router.TaskSimpleCodeEdit},
+		{"python script", "write a python script that sorts a list of numbers", router.TaskSimpleCodeEdit},
+		{"rest api", "build a REST API in Go with three endpoints for users", router.TaskSimpleCodeEdit},
+		// Non-code "write" must NOT become a code task.
+		{"blog post", "write a blog post about remote work", router.TaskSimpleChat},
+		{"poem", "write a poem about the sea", router.TaskSimpleChat},
+		// Genuine doc intent (verb form) still routes as summarization.
+		{"document this function", "document this function with a docstring", router.TaskSummarization},
+		// Code-with-clear-intent must not fall through to unknown_high_risk/premium.
+		{"review dockerfile", "review my dockerfile for best practices", router.TaskSimpleCodeEdit},
+		{"convert go to rust", "convert this go code to rust", router.TaskSimpleCodeEdit},
+		// Questions about code must NOT be pushed to premium (no ambiguous noun → cheap).
+		{"regex question stays chat", "what does this regex do", router.TaskSimpleChat},
+		{"function noun stays chat", "what is the function of the liver", router.TaskSimpleChat},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			messages := []openai.Message{{Role: "user", Content: tt.content}}
+			features := classifier.ExtractFromMessages(messages, classifier.RequestHints{})
+			got := classifier.ClassifyTask(features, messages)
+			if got.TaskType != string(tt.wantTask) {
+				t.Fatalf("task=%q want %q for %q", got.TaskType, tt.wantTask, tt.content)
+			}
+		})
+	}
+}
+
 func assertSignal(t *testing.T, signals []string, want string) {
 	t.Helper()
 	for _, signal := range signals {
