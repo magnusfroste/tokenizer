@@ -83,6 +83,25 @@ make lint
 `make smoke-live`, som gör ett riktigt OpenRouter-anrop och verifierar svar +
 realiserad kostnad (hoppas över om nyckeln saknas).
 
+## Leveransmodell
+
+Routern är **en enda OpenAI-kompatibel tjänst** som behöver ingen databas för att
+köra (in-memory aggregat; provider nås över HTTPS). Den levereras i tre former —
+samma API, olika paketering/hosting:
+
+| Modell | Hur | För |
+|---|---|---|
+| **Local build** | `make dev` / `go build ./cmd/router` (kräver Go) | Utveckling, dogfooding |
+| **Docker** | `Dockerfile` → `docker build` + `docker run`, eller den publicerade imagen `ghcr.io/magnusfroste/tokenizer` | Vilken Docker-host som helst |
+| **EasyPanel / PaaS** | **App** från `Dockerfile`, eller **Compose** från `deploy/docker-compose.yml` (volym + env-substitution) | Self-hosted, en URL, env i UI:t |
+
+Konfiguration sker helt via miljövariabler (`.env.example`, `deploy/example.env`).
+Minimum: `LOCAL_API_KEY` (stark secret) och — för riktig provider —
+`OPENROUTER_API_KEY`. Sätt `ROUTER_DASHBOARD_PASSWORD` för att öppna
+`/router/dashboard` i en webbläsare och `ROUTER_DATA_DIR` (en monterad volym) för
+att spend/savings ska överleva omstart. Detaljer:
+[`01-architecture/14-deployment-topology.md`](01-architecture/14-deployment-topology.md).
+
 ## Mål
 
 Bygg en produktionsduglig tjänst som kan:
