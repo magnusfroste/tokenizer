@@ -1,4 +1,4 @@
-.PHONY: build dev test test-unit test-integration test-eval test-policy test-regression eval-report smoke smoke-live lint fmt vet tidy clean run run-mock migrate seed
+.PHONY: build dev test test-unit test-integration test-eval test-policy test-regression eval-report smoke smoke-live load lint fmt vet tidy clean run run-mock migrate seed
 
 GO ?= go
 PSQL ?= psql
@@ -63,6 +63,12 @@ smoke:
 # OPENROUTER_API_KEY is unset.
 smoke-live:
 	./scripts/smoke-openrouter.sh
+
+# Concurrent load test against the mock provider (ISSUE-064). Asserts end-to-end
+# p95 under budget with zero errors and prints router_routing_overhead_ms.
+# Deterministic and credential-free — the beta-gate latency-under-load check.
+load:
+	./scripts/load.sh
 
 lint: vet
 	@out=$$(gofmt -l . | grep -v '^vendor/' || true); \

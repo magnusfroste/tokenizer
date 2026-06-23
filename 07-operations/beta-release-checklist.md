@@ -28,6 +28,11 @@ Mätt under representativ last, p95, **före** provideranrop.
 - [ ] Fast path gör inga LLM- eller externa anrop (verifierat i kod + trace).
 - [ ] Latency-histogram syns i `/metrics` och på dashboarden.
 
+> Mätmetod: `make load` (ISSUE-064) — concurrent lasttest mot mock-providern,
+> rapporterar end-to-end p50/p95/p99 + felkvot och skrapar
+> `router_routing_overhead_ms` från `/metrics`. Referensmätning (25 samtidiga ×
+> 500 req): router-overhead p95 ≈ 0,05 ms, end-to-end p95 ≈ 12 ms, 0 fel.
+
 ## 3. Fallback & resiliens
 
 - [ ] Fallback-kedjan byggs **före** första provideranropet.
