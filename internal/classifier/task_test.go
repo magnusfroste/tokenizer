@@ -132,6 +132,37 @@ func TestClassifyTaskSpecificRiskWinsOverGenericCodeEdit(t *testing.T) {
 	assertSignal(t, got.Signals, "database_migration_keyword")
 }
 
+// TestClassifyTask_Issue066_IntentAwareSecurity verifies that documentation /
+// explanation intent over a security topic does not over-escalate to
+// security_review, while genuine security-review requests are unaffected.
+func TestClassifyTask_Issue066_IntentAwareSecurity(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantTask router.TaskType
+	}{
+		// Genuine security work — must stay security_review.
+		{"explicit security review", "Security review this login form for XSS and secret leakage", router.TaskSecurityReview},
+		{"threat model", "Threat model the new SSO integration", router.TaskSecurityReview},
+		{"check for csrf vuln", "Check this auth handler for a CSRF vulnerability", router.TaskSecurityReview},
+		// Documentation/explanation about a security topic — must NOT be security_review.
+		{"document security modules", "Update the documentation for the security review and audit log modules", router.TaskSummarization},
+		{"explain csrf protection", "Explain what CSRF protection we have in the gateway", router.TaskSummarization},
+		{"changelog for vuln scanner", "Write a changelog entry for the vulnerability scanner", router.TaskSummarization},
+		{"document scanning function", "Document this function that scans for vulnerabilities and exploits", router.TaskSummarization},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			messages := []openai.Message{{Role: "user", Content: tt.content}}
+			features := classifier.ExtractFromMessages(messages, classifier.RequestHints{})
+			got := classifier.ClassifyTask(features, messages)
+			if got.TaskType != string(tt.wantTask) {
+				t.Fatalf("task=%q want %q for %q (signals=%v)", got.TaskType, tt.wantTask, tt.content, got.Signals)
+			}
+		})
+	}
+}
+
 func assertSignal(t *testing.T, signals []string, want string) {
 	t.Helper()
 	for _, signal := range signals {
