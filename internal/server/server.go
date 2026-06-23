@@ -61,6 +61,11 @@ type Config struct {
 
 	// Route decision cache (ISSUE-052). Optional; caches low-risk decisions.
 	DecisionCache *decisioncache.Cache
+
+	// Premium-tier per-token pricing (micros per million tokens) for the
+	// dashboard "saved vs all-premium" baseline. Optional.
+	PremiumInputMicrosPerMTok  int64
+	PremiumOutputMicrosPerMTok int64
 }
 
 func New(cfg Config) http.Handler {
@@ -118,12 +123,14 @@ func New(cfg Config) http.Handler {
 
 	// Dashboard (no auth — read-only aggregated stats).
 	htmlH, dataH := DashboardHandler(DashboardOptions{
-		Spend:       cfg.SpendTracker,
-		Health:      cfg.HealthTracker,
-		Outcomes:    cfg.OutcomeStore,
-		Comparisons: cfg.ComparisonTracker,
-		Logger:      cfg.Logger,
-		Version:     cfg.RegistryVersion,
+		Spend:                      cfg.SpendTracker,
+		Health:                     cfg.HealthTracker,
+		Outcomes:                   cfg.OutcomeStore,
+		Comparisons:                cfg.ComparisonTracker,
+		Logger:                     cfg.Logger,
+		Version:                    cfg.RegistryVersion,
+		PremiumInputMicrosPerMTok:  cfg.PremiumInputMicrosPerMTok,
+		PremiumOutputMicrosPerMTok: cfg.PremiumOutputMicrosPerMTok,
 	})
 	mux.Handle("GET /router/dashboard",
 		auth.Middleware(cfg.KeyStore)(auth.RequireRole(auth.RoleAdmin)(http.HandlerFunc(htmlH))))

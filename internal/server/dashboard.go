@@ -22,6 +22,21 @@ type DashboardOptions struct {
 	Comparisons *eventlog.ComparisonTracker
 	Logger      *slog.Logger
 	Version     string // registry version label
+
+	// Premium-tier per-token pricing (micros per million tokens), used to
+	// compute the "saved vs all-premium" baseline. Zero disables the card.
+	PremiumInputMicrosPerMTok  int64
+	PremiumOutputMicrosPerMTok int64
+}
+
+// SavingsSummary quantifies the headline value proposition: what the observed
+// traffic actually cost versus what it would have cost if every request had used
+// the premium model (same token usage, premium pricing).
+type SavingsSummary struct {
+	ActualUSD          float64 `json:"actual_usd"`
+	PremiumBaselineUSD float64 `json:"premium_baseline_usd"`
+	SavedUSD           float64 `json:"saved_usd"`
+	SavedPct           float64 `json:"saved_pct"`
 }
 
 // DashboardData is the JSON payload returned by /router/dashboard/data.
@@ -29,6 +44,7 @@ type DashboardData struct {
 	Version        string                      `json:"registry_version"`
 	TotalRequests  int64                       `json:"total_requests"`
 	TotalCostUSD   float64                     `json:"total_cost_usd"`
+	Savings        SavingsSummary              `json:"savings"`
 	RoutesByModel  []spend.ModelRow            `json:"routes_by_model"`
 	SpendByTenant  []spend.TenantRow           `json:"spend_by_tenant"`
 	ProviderHealth map[string]float64          `json:"provider_health"`
@@ -69,6 +85,7 @@ func buildDashboardData(opts DashboardOptions, taskFilter string) DashboardData 
 		d.TotalCostUSD = opts.Spend.TotalCostUSD()
 		d.RoutesByModel = opts.Spend.ByModel()
 		d.SpendByTenant = opts.Spend.ByTenant()
+		d.Savings = computeSavings(d.RoutesByModel, d.TotalCostUSD, opts.PremiumInputMicrosPerMTok, opts.PremiumOutputMicrosPerMTok)
 	}
 	if opts.Health != nil {
 		d.ProviderHealth = opts.Health.Providers()
@@ -82,6 +99,29 @@ func buildDashboardData(opts DashboardOptions, taskFilter string) DashboardData 
 		d.ShadowRecent = opts.Comparisons.Recent(taskFilter)
 	}
 	return d
+}
+
+// computeSavings estimates spend versus an all-premium baseline: every request's
+// actual token usage repriced at the premium model's per-token rate. The
+// baseline is an estimate (premium might generate different-length outputs), so
+// it is the conservative, observable "what you'd pay without routing" figure.
+func computeSavings(rows []spend.ModelRow, actualUSD float64, premInMicrosPerMTok, premOutMicrosPerMTok int64) SavingsSummary {
+	s := SavingsSummary{ActualUSD: actualUSD}
+	if premInMicrosPerMTok <= 0 && premOutMicrosPerMTok <= 0 {
+		return s
+	}
+	var premiumUSD float64
+	for _, r := range rows {
+		// micros = tokens * (microsPerMillionTok / 1e6); USD = micros / 1e6.
+		premiumUSD += (float64(r.InputTokens)*float64(premInMicrosPerMTok) +
+			float64(r.OutputTokens)*float64(premOutMicrosPerMTok)) / 1e12
+	}
+	s.PremiumBaselineUSD = premiumUSD
+	s.SavedUSD = premiumUSD - actualUSD
+	if premiumUSD > 0 {
+		s.SavedPct = (1 - actualUSD/premiumUSD) * 100
+	}
+	return s
 }
 
 var dashboardTmpl = template.Must(template.New("dashboard").Funcs(template.FuncMap{
@@ -120,6 +160,10 @@ h1{font-size:1.5rem;font-weight:700;margin-bottom:0.25rem;color:#f8fafc}
 .card-label{font-size:0.75rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.35rem}
 .card-value{font-size:1.75rem;font-weight:700;color:#f8fafc}
 .card-sub{font-size:0.78rem;color:#94a3b8;margin-top:0.2rem}
+.hero{background:linear-gradient(135deg,#064e3b,#065f46);border:1px solid #10b981;border-radius:12px;padding:1.5rem 1.75rem;margin-bottom:1.5rem}
+.hero-label{font-size:0.78rem;color:#a7f3d0;text-transform:uppercase;letter-spacing:.06em}
+.hero-value{font-size:2.6rem;font-weight:800;color:#34d399;line-height:1.1;margin:0.15rem 0}
+.hero-sub{font-size:0.95rem;color:#d1fae5}
 table{width:100%;border-collapse:collapse;margin-bottom:2rem}
 th{text-align:left;font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;padding:0.6rem 0.75rem;border-bottom:1px solid #2d3748}
 td{padding:0.6rem 0.75rem;border-bottom:1px solid #1e2330;font-size:0.88rem}
@@ -137,6 +181,14 @@ section{margin-bottom:2.5rem}
 <body>
 <h1>⚡ Tokenizer Router Dashboard</h1>
 <p class="subtitle">Registry: {{.Version}} &nbsp;·&nbsp; Live in-memory aggregation</p>
+
+{{if gt .Savings.PremiumBaselineUSD 0.0}}
+<div class="hero">
+  <div class="hero-label">💸 Saved vs all-premium</div>
+  <div class="hero-value">{{printf "%.1f%%" .Savings.SavedPct}} cheaper</div>
+  <div class="hero-sub">Saved <strong>{{usd .Savings.SavedUSD}}</strong> — you paid {{usd .Savings.ActualUSD}}; routing everything to the premium model would have cost {{usd .Savings.PremiumBaselineUSD}}.</div>
+</div>
+{{end}}
 
 <div class="grid">
   <div class="card">

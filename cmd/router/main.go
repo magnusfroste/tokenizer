@@ -164,26 +164,31 @@ func main() {
 		parseBoolEnv(os.Getenv("ROUTER_PROMPT_LOGGING")),
 	)
 
+	// Premium-tier pricing for the dashboard "saved vs all-premium" baseline.
+	premInMicros, premOutMicros := premiumPricing(snap)
+
 	handler := server.New(server.Config{
-		Logger:                 logger,
-		KeyStore:               keyStore,
-		Provider:               primaryProvider,
-		ContextPipelineEnabled: parseBoolEnv(os.Getenv("ROUTER_CONTEXT_PIPELINE_ENABLED")),
-		PromptAdapter:          buildPromptAdapter(parseBoolEnv(os.Getenv("ROUTER_PROMPT_ADAPTER_ENABLED"))),
-		Engine:                 eng,
-		Adapters:               adapters,
-		PolicyCache:            policyCache,
-		ShadowPolicyCache:      shadowPolicyCache,
-		HealthTracker:          healthTracker,
-		SpendTracker:           spendTracker,
-		ComparisonTracker:      comparisonTracker,
-		EventQueue:             eventQueue,
-		RegistryVersion:        snap.RegistryVersion(),
-		OutcomeStore:           outcomeStore,
-		Auditor:                auditSink,
-		Retention:              retentionSettings,
-		Budget:                 budgetEvaluator,
-		DecisionCache:          decisionCache,
+		Logger:                     logger,
+		KeyStore:                   keyStore,
+		Provider:                   primaryProvider,
+		ContextPipelineEnabled:     parseBoolEnv(os.Getenv("ROUTER_CONTEXT_PIPELINE_ENABLED")),
+		PromptAdapter:              buildPromptAdapter(parseBoolEnv(os.Getenv("ROUTER_PROMPT_ADAPTER_ENABLED"))),
+		Engine:                     eng,
+		Adapters:                   adapters,
+		PolicyCache:                policyCache,
+		ShadowPolicyCache:          shadowPolicyCache,
+		HealthTracker:              healthTracker,
+		SpendTracker:               spendTracker,
+		ComparisonTracker:          comparisonTracker,
+		EventQueue:                 eventQueue,
+		RegistryVersion:            snap.RegistryVersion(),
+		OutcomeStore:               outcomeStore,
+		Auditor:                    auditSink,
+		Retention:                  retentionSettings,
+		Budget:                     budgetEvaluator,
+		DecisionCache:              decisionCache,
+		PremiumInputMicrosPerMTok:  premInMicros,
+		PremiumOutputMicrosPerMTok: premOutMicros,
 	})
 
 	addr := os.Getenv("ROUTER_ADDR")
@@ -302,6 +307,18 @@ func envDefault(name, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// premiumPricing returns the premium-tier model's input/output price (micros per
+// million tokens) for the dashboard's all-premium savings baseline. Returns 0,0
+// when no premium model exists in the snapshot.
+func premiumPricing(snap *registry.Snapshot) (inMicros, outMicros int64) {
+	for _, m := range snap.EnabledModelsWithCapabilities(registry.Capabilities{Chat: true}) {
+		if m.Tier == registry.TierPremium {
+			return m.Cost.InputMicrosPerMillionToken, m.Cost.OutputMicrosPerMillionToken
+		}
+	}
+	return 0, 0
 }
 
 func parseIntEnv(s string, fallback int) int {
