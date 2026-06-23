@@ -36,7 +36,12 @@ func ClassifyTask(features Features, messages []openai.Message) TaskClassificati
 	signals := newSignalSet()
 	addFeatureSignals(signals, features)
 
-	hasSecurityReviewSignal := hasExplicitSecurityReviewSignal(ctx)
+	// Documentation/summary/explanation intent describes a security topic rather
+	// than requesting security work, so it must not escalate to security_review
+	// just because security keywords appear (e.g. "document the security review
+	// module"). Genuine reviews ("review/audit/scan ... for XSS") carry no doc
+	// intent and are unaffected. See ISSUE-066.
+	hasSecurityReviewSignal := hasExplicitSecurityReviewSignal(ctx) && !hasDocIntentSignal(ctx)
 	hasDatabaseMigrationSignal := hasDatabaseMigrationSignal(ctx, features)
 	hasDebugSignal := (features.HasStackTrace || hasAnyKeyword(features.Keywords, "debug")) &&
 		(features.RequiresCode || hasAnyKeyword(features.Keywords, "code", "auth", "payment", "security"))
@@ -209,7 +214,20 @@ func hasTrivialGitSignal(ctx taskContext) bool {
 }
 
 func hasSummarizationSignal(ctx taskContext) bool {
-	return containsAnyTerm(ctx.lower, []string{"summarize", "summarise", "summary", "tl;dr", "recap", "sammanfatta"})
+	return containsAnyTerm(ctx.lower, []string{"summarize", "summarise", "summary", "tl;dr", "recap", "sammanfatta"}) ||
+		hasDocIntentSignal(ctx)
+}
+
+// hasDocIntentSignal detects documentation/explanation intent — writing about or
+// describing code rather than acting on it. It both routes such requests as
+// summarization and (via hasSecurityReviewSignal) prevents a security topic from
+// over-escalating a doc task to security_review. Deliberately uses specific doc
+// nouns/verbs, not broad words like "update"/"add", to avoid false positives.
+func hasDocIntentSignal(ctx taskContext) bool {
+	return containsAnyTerm(ctx.lower, []string{
+		"document", "documentation", "docs", "docstring", "doc comment",
+		"readme", "changelog", "release notes", "explain", "describe",
+	})
 }
 
 func hasSimpleCodeEditSignal(ctx taskContext, features Features) bool {
