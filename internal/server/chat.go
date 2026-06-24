@@ -186,6 +186,7 @@ func ChatCompletionsHandler(p provider.Adapter, opts ...ChatOptions) http.Handle
 						tenantID:         job.TenantID,
 						projectID:        job.ProjectID,
 						estimatedCostUSD: dec.EstimatedCostUSD,
+						costFn:           cfg.actualCostUSD,
 					})
 					return
 				}
@@ -282,7 +283,7 @@ func streamWithFallback(
 		return
 	}
 
-	recordStream := func(c streamCandidate, i int, firstTokenMs, durationMs int64, err error) {
+	recordStream := func(c streamCandidate, i int, firstTokenMs, durationMs int64, inputTokens, outputTokens int, err error) {
 		if healthTracker != nil {
 			if err == nil {
 				healthTracker.RecordSuccess(c.providerID)
@@ -294,6 +295,13 @@ func streamWithFallback(
 			code := ""
 			if err != nil {
 				_, code = mapProviderError(err)
+			}
+			// When usage is known, attribute realized cost from real tokens so
+			// streamed requests don't fall back to the (max-tokens) estimate —
+			// which would make spend and the savings baseline inconsistent.
+			var actualCost float64
+			if (inputTokens > 0 || outputTokens > 0) && meta.costFn != nil {
+				actualCost = meta.costFn(c.modelID, c.providerID, inputTokens, outputTokens)
 			}
 			queue.Enqueue(eventlog.Event{
 				Type: eventlog.EventTypeAttempt,
@@ -308,6 +316,9 @@ func streamWithFallback(
 					ErrorCode:        code,
 					DurationMs:       durationMs,
 					FirstTokenMs:     firstTokenMs,
+					InputTokens:      inputTokens,
+					OutputTokens:     outputTokens,
+					ActualCostUSD:    actualCost,
 					EstimatedCostUSD: meta.estimatedCostUSD,
 					AttemptedAt:      time.Now(),
 				},
@@ -319,13 +330,14 @@ func streamWithFallback(
 		req := normalized.Clone()
 		req.Model = c.providerModelID
 		attemptStart := time.Now()
+		var usageIn, usageOut int // captured from the provider's final usage chunk
 		attemptCtx, cancelAttempt := context.WithCancel(r.Context())
 
 		chunks, err := c.adapter.Stream(attemptCtx, req)
 		if err != nil {
 			cancelAttempt()
 			logStreamAttempt(r, logger, c, i, "stream_open_error", err)
-			recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), err)
+			recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), 0, 0, err)
 			continue
 		}
 
@@ -339,7 +351,7 @@ func streamWithFallback(
 			if !chanOk {
 				cancelAttempt()
 				logStreamAttempt(r, logger, c, i, "stream_channel_closed", nil)
-				recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), fmt.Errorf("channel closed"))
+				recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), 0, 0, fmt.Errorf("channel closed"))
 				continue
 			}
 			firstChunk = chunk
@@ -347,7 +359,7 @@ func streamWithFallback(
 		case <-timer.C:
 			cancelAttempt()
 			logStreamAttempt(r, logger, c, i, "first_token_timeout", nil)
-			recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), provider.ErrProviderTimeout)
+			recordStream(c, i, 0, time.Since(attemptStart).Milliseconds(), 0, 0, provider.ErrProviderTimeout)
 			continue
 		case <-r.Context().Done():
 			timer.Stop()
@@ -366,10 +378,10 @@ func streamWithFallback(
 			cancelAttempt()
 			if i+1 < len(candidates) {
 				logStreamAttempt(r, logger, c, i, "first_chunk_error", firstChunk.Err)
-				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), firstChunk.Err)
+				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), 0, 0, firstChunk.Err)
 				continue
 			}
-			recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), firstChunk.Err)
+			recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), 0, 0, firstChunk.Err)
 			status, code := mapProviderError(firstChunk.Err)
 			writeError(w, status, code, firstChunk.Err.Error())
 			return
@@ -383,11 +395,14 @@ func streamWithFallback(
 		w.Header().Set("X-Router-First-Token-Sent", "true")
 		w.Header().Set("X-Router-First-Token-Ms", strconv.FormatInt(firstTokenMs, 10))
 		started := time.Now()
+		if firstChunk.InputTokens > 0 || firstChunk.OutputTokens > 0 {
+			usageIn, usageOut = firstChunk.InputTokens, firstChunk.OutputTokens
+		}
 
 		if firstChunk.Done {
 			writeSSEData(w, []byte("[DONE]"))
 			flusher.Flush()
-			recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), nil)
+			recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), usageIn, usageOut, nil)
 			cancelAttempt()
 			return
 		}
@@ -398,11 +413,14 @@ func streamWithFallback(
 
 		// Drain the rest.
 		for chunk := range chunks {
+			if chunk.InputTokens > 0 || chunk.OutputTokens > 0 {
+				usageIn, usageOut = chunk.InputTokens, chunk.OutputTokens
+			}
 			if chunk.Err != nil {
 				writeSSEError(w, provider.ErrStreamInterrupted.Error(), chunk.Err.Error())
 				flusher.Flush()
 				logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), chunk.Err)
-				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), chunk.Err)
+				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), 0, 0, chunk.Err)
 				cancelAttempt()
 				return
 			}
@@ -410,7 +428,7 @@ func streamWithFallback(
 				writeSSEData(w, []byte("[DONE]"))
 				flusher.Flush()
 				logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), nil)
-				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), nil)
+				recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), usageIn, usageOut, nil)
 				cancelAttempt()
 				return
 			}
@@ -420,7 +438,7 @@ func streamWithFallback(
 			}
 		}
 		logStreamResult(r, logger, c.providerID, c.modelID, true, time.Since(started).Milliseconds(), nil)
-		recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), nil)
+		recordStream(c, i, firstTokenMs, time.Since(attemptStart).Milliseconds(), usageIn, usageOut, nil)
 		cancelAttempt()
 		return
 	}
@@ -848,6 +866,9 @@ type attemptMeta struct {
 	tenantID         string
 	projectID        string
 	estimatedCostUSD float64
+	// costFn computes realized USD from actual token usage (registry pricing).
+	// Used by the streaming path, where usage arrives in a final chunk.
+	costFn func(modelID, providerID string, inTok, outTok int) float64
 }
 
 // recordAttempt updates the health tracker and enqueues an AttemptEvent. When

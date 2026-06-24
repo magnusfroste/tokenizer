@@ -110,7 +110,11 @@ func (a *OpenAIAdapter) Stream(ctx context.Context, req *NormalizedModelRequest)
 	}
 	outbound := req.Clone()
 	outbound.Stream = true
-	body, err := json.Marshal(outbound.ToOpenAI())
+	oreq := outbound.ToOpenAI()
+	// Ask the provider to emit a final usage chunk so streamed requests still
+	// report real token counts (needed for spend/savings accounting).
+	oreq.StreamOptions = &openai.StreamOptions{IncludeUsage: true}
+	body, err := json.Marshal(oreq)
 	if err != nil {
 		if cancel != nil {
 			cancel()
@@ -211,7 +215,20 @@ func parseSSEDataLine(line string) (StreamChunk, bool) {
 	if payload == "" {
 		return StreamChunk{}, false
 	}
-	return StreamChunk{Data: []byte(payload)}, true
+	chunk := StreamChunk{Data: []byte(payload)}
+	// The final usage chunk (requested via stream_options.include_usage) carries
+	// token counts; capture them so the router can account streamed requests.
+	var u struct {
+		Usage *struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
+	}
+	if json.Unmarshal([]byte(payload), &u) == nil && u.Usage != nil {
+		chunk.InputTokens = u.Usage.PromptTokens
+		chunk.OutputTokens = u.Usage.CompletionTokens
+	}
+	return chunk, true
 }
 
 func chatCompletionsURL(baseURL string) (string, error) {
