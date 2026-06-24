@@ -9,9 +9,17 @@ type ChatRequest struct {
 	MaxTokens           *int           `json:"max_tokens,omitempty"`
 	MaxCompletionTokens *int           `json:"max_completion_tokens,omitempty"`
 	Stream              bool           `json:"stream,omitempty"`
+	StreamOptions       *StreamOptions `json:"stream_options,omitempty"`
 	Tools               []any          `json:"tools,omitempty"`
 	ResponseFormat      any            `json:"response_format,omitempty"`
 	Metadata            map[string]any `json:"metadata,omitempty"`
+}
+
+// StreamOptions mirrors the OpenAI/OpenRouter streaming options. IncludeUsage
+// asks the provider to emit a final chunk carrying token usage so the router can
+// account real tokens/cost for streamed requests.
+type StreamOptions struct {
+	IncludeUsage bool `json:"include_usage,omitempty"`
 }
 
 type Message struct {

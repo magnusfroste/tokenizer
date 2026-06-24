@@ -22,6 +22,10 @@ type StreamChunk struct {
 	Data []byte
 	Done bool
 	Err  error
+	// InputTokens/OutputTokens carry usage from the provider's final usage chunk
+	// (when stream_options.include_usage was requested); 0 on content chunks.
+	InputTokens  int
+	OutputTokens int
 }
 
 // NormalizedModelRequest is the provider-neutral request shape used between
