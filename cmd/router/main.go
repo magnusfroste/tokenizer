@@ -142,6 +142,7 @@ func main() {
 	outcomeStore := outcomes.NewStore()
 	eventQueue := eventlog.NewQueue(0)
 	comparisonTracker := eventlog.NewComparisonTracker(0)
+	requestLog := eventlog.NewRequestLogTracker(0)
 
 	// Budget caps (ISSUE-051): a ledger accrues spend from the event queue and an
 	// evaluator checks it on the request path. Caps are opt-in; ROUTER_BUDGET_USD
@@ -165,7 +166,7 @@ func main() {
 
 	// Build the fan-out event handler: logging + metrics + spend + budget ledger
 	// + shadow comparison tracking.
-	combinedHandler := buildEventHandler(logger, spendTracker, budgetLedger, comparisonTracker)
+	combinedHandler := buildEventHandler(logger, spendTracker, budgetLedger, comparisonTracker, requestLog)
 
 	// Start the queue worker in the background.
 	workerCtx, workerCancel := context.WithCancel(context.Background())
@@ -212,6 +213,7 @@ func main() {
 		HealthTracker:              healthTracker,
 		SpendTracker:               spendTracker,
 		ComparisonTracker:          comparisonTracker,
+		RequestLog:                 requestLog,
 		EventQueue:                 eventQueue,
 		RegistryVersion:            snap.RegistryVersion(),
 		OutcomeStore:               outcomeStore,
@@ -308,7 +310,7 @@ func buildPromptAdapter(enabled bool) *provider.PromptAdapter {
 	}
 }
 
-func buildEventHandler(logger *slog.Logger, spendTracker *spend.Tracker, budgetLedger *budget.Ledger, comparisonTracker *eventlog.ComparisonTracker) eventlog.Handler {
+func buildEventHandler(logger *slog.Logger, spendTracker *spend.Tracker, budgetLedger *budget.Ledger, comparisonTracker *eventlog.ComparisonTracker, requestLog *eventlog.RequestLogTracker) eventlog.Handler {
 	handlers := []eventlog.Handler{
 		&eventlog.LoggingHandler{Logger: logger},
 		spendTracker,
@@ -316,6 +318,9 @@ func buildEventHandler(logger *slog.Logger, spendTracker *spend.Tracker, budgetL
 	}
 	if comparisonTracker != nil {
 		handlers = append(handlers, comparisonTracker)
+	}
+	if requestLog != nil {
+		handlers = append(handlers, requestLog)
 	}
 	return eventlog.MultiHandler(handlers...)
 }

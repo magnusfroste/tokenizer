@@ -44,6 +44,7 @@ type Config struct {
 	SpendTracker      *spend.Tracker
 	EventQueue        *eventlog.Queue
 	ComparisonTracker *eventlog.ComparisonTracker
+	RequestLog        *eventlog.RequestLogTracker
 	RegistryVersion   string // shown on dashboard
 
 	// Feedback (Sprint 07). Optional.
@@ -138,6 +139,7 @@ func New(cfg Config) http.Handler {
 		Health:                     cfg.HealthTracker,
 		Outcomes:                   cfg.OutcomeStore,
 		Comparisons:                cfg.ComparisonTracker,
+		RequestLog:                 cfg.RequestLog,
 		Logger:                     cfg.Logger,
 		Version:                    cfg.RegistryVersion,
 		PremiumInputMicrosPerMTok:  cfg.PremiumInputMicrosPerMTok,
