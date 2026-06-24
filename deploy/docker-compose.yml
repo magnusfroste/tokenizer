@@ -34,6 +34,11 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENROUTER_REFERER=${OPENROUTER_REFERER:-}
       - OPENROUTER_TITLE=${OPENROUTER_TITLE:-}
+      # --- Model roster: which OpenRouter model fills each tier (optional).
+      #     Use OpenRouter slugs, e.g. z-ai/glm-4.6. Empty keeps the default. ---
+      - ROUTER_MODEL_CHEAP=${ROUTER_MODEL_CHEAP:-}
+      - ROUTER_MODEL_BALANCED=${ROUTER_MODEL_BALANCED:-}
+      - ROUTER_MODEL_PREMIUM=${ROUTER_MODEL_PREMIUM:-}
       # --- Cost guard: per-tenant spend cap in USD (0 disables). ---
       - ROUTER_BUDGET_USD=${ROUTER_BUDGET_USD:-0}
       # --- Privacy / retention. Prompt logging OFF unless explicitly enabled. ---
