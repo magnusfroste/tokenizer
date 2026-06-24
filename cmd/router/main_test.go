@@ -80,7 +80,7 @@ func TestBuildPromptAdapterEnabledAppliesDefaultProfileRules(t *testing.T) {
 
 func TestBuildEventHandlerFansOutShadowComparisons(t *testing.T) {
 	tracker := eventlog.NewComparisonTracker(10)
-	handler := buildEventHandler(slog.New(slog.NewTextHandler(os.Stderr, nil)), spend.New(), budget.NewLedger(), tracker)
+	handler := buildEventHandler(slog.New(slog.NewTextHandler(os.Stderr, nil)), spend.New(), budget.NewLedger(), tracker, eventlog.NewRequestLogTracker(10))
 	handler.Handle(context.Background(), eventlog.Event{
 		Type: eventlog.EventTypeDecision,
 		Decision: &eventlog.DecisionEvent{

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/magnusfroste/tokenizer/internal/eventlog"
 	"github.com/magnusfroste/tokenizer/internal/health"
@@ -20,6 +21,7 @@ type DashboardOptions struct {
 	Health      *health.Tracker
 	Outcomes    *outcomes.Store
 	Comparisons *eventlog.ComparisonTracker
+	RequestLog  *eventlog.RequestLogTracker
 	Logger      *slog.Logger
 	Version     string // registry version label
 
@@ -52,6 +54,7 @@ type DashboardData struct {
 	OutcomeCount   int                         `json:"outcome_count"`
 	ShadowSummary  eventlog.ComparisonSummary  `json:"shadow_summary"`
 	ShadowRecent   []eventlog.ComparisonRecord `json:"shadow_recent"`
+	RecentRequests []eventlog.RequestLogRecord `json:"recent_requests"`
 	TaskFilter     string                      `json:"task_filter,omitempty"`
 }
 
@@ -98,6 +101,9 @@ func buildDashboardData(opts DashboardOptions, taskFilter string) DashboardData 
 		d.ShadowSummary = opts.Comparisons.Summary()
 		d.ShadowRecent = opts.Comparisons.Recent(taskFilter)
 	}
+	if opts.RequestLog != nil {
+		d.RecentRequests = opts.RequestLog.Recent(50)
+	}
 	return d
 }
 
@@ -125,8 +131,9 @@ func computeSavings(rows []spend.ModelRow, actualUSD float64, premInMicrosPerMTo
 }
 
 var dashboardTmpl = template.Must(template.New("dashboard").Funcs(template.FuncMap{
-	"usd": func(v float64) string { return fmt.Sprintf("$%.6f", v) },
-	"pct": func(v float64) string { return fmt.Sprintf("%.0f%%", v*100) },
+	"usd":   func(v float64) string { return fmt.Sprintf("$%.6f", v) },
+	"pct":   func(v float64) string { return fmt.Sprintf("%.0f%%", v*100) },
+	"clock": func(t time.Time) string { return t.Local().Format("15:04:05") },
 	"healthClass": func(v float64) string {
 		switch {
 		case v >= 0.9:
@@ -243,6 +250,28 @@ section{margin-bottom:2.5rem}
   <td>{{usd .CostUSD}}</td>
 </tr>
 {{else}}<tr><td colspan="7" style="color:#64748b;text-align:center;padding:1.5rem">No requests yet — send some!</td></tr>
+{{end}}
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Recent requests</h2>
+<table>
+<thead><tr><th>Time</th><th>Task</th><th>Risk</th><th>Selected model</th><th>Provider</th><th>In</th><th>Out</th><th>Cost</th></tr></thead>
+<tbody>
+{{range .RecentRequests}}
+<tr>
+  <td class="mono">{{clock .Time}}</td>
+  <td>{{if .Blocked}}<span class="bad">blocked</span> {{end}}{{.TaskType}}</td>
+  <td>{{.RiskLevel}}</td>
+  <td class="mono">{{.Model}}</td>
+  <td class="mono">{{.Provider}}</td>
+  <td>{{.InputTokens}}</td>
+  <td>{{.OutputTokens}}</td>
+  <td>{{usd .CostUSD}}</td>
+</tr>
+{{else}}<tr><td colspan="8" style="color:#64748b;text-align:center;padding:1.5rem">No requests yet — send some!</td></tr>
 {{end}}
 </tbody>
 </table>
