@@ -265,7 +265,7 @@ section{margin-bottom:2.5rem}
   <td class="mono">{{clock .Time}}</td>
   <td>{{if .Blocked}}<span class="bad">blocked</span> {{end}}{{.TaskType}}</td>
   <td>{{.RiskLevel}}</td>
-  <td class="mono">{{.Model}}</td>
+  <td class="mono">{{.Model}}{{if .ProviderModelID}}<div style="font-size:0.72rem;color:#64748b">{{.ProviderModelID}}</div>{{end}}</td>
   <td class="mono">{{.Provider}}</td>
   <td>{{.InputTokens}}</td>
   <td>{{.OutputTokens}}</td>

@@ -665,6 +665,7 @@ func (o *ChatOptions) enqueueDecision(job *router.JobDescriptor, dec engine.Rout
 		Sensitivity:           string(job.Sensitivity),
 		SelectedModel:         dec.SelectedModel,
 		SelectedProvider:      dec.SelectedProvider,
+		ProviderModelID:       dec.ProviderModelID,
 		PolicyVersion:         dec.PolicyVersion,
 		PromptTokens:          job.PromptTokensEstimate,
 		EstimatedCostUSD:      dec.EstimatedCostUSD,

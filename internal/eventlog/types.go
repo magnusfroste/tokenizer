@@ -35,6 +35,7 @@ type DecisionEvent struct {
 	Sensitivity       string
 	SelectedModel     string
 	SelectedProvider  string
+	ProviderModelID   string // concrete model sent to the provider (e.g. openai/gpt-4o-mini)
 	PolicyVersion     string
 	PromptTokens      int
 	EstimatedCostUSD  float64

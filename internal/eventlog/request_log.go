@@ -12,16 +12,17 @@ const defaultRequestLogLimit = 100
 // log — timestamp, classification, selected model, tokens and cost, similar to a
 // provider's "generations" log.
 type RequestLogRecord struct {
-	Time         time.Time `json:"time"`
-	RequestID    string    `json:"request_id"`
-	TaskType     string    `json:"task_type,omitempty"`
-	RiskLevel    string    `json:"risk_level,omitempty"`
-	Model        string    `json:"model,omitempty"`
-	Provider     string    `json:"provider,omitempty"`
-	InputTokens  int       `json:"input_tokens"`
-	OutputTokens int       `json:"output_tokens"`
-	CostUSD      float64   `json:"cost_usd"`
-	Blocked      bool      `json:"blocked,omitempty"`
+	Time            time.Time `json:"time"`
+	RequestID       string    `json:"request_id"`
+	TaskType        string    `json:"task_type,omitempty"`
+	RiskLevel       string    `json:"risk_level,omitempty"`
+	Model           string    `json:"model,omitempty"`             // internal role, e.g. cheap-general
+	ProviderModelID string    `json:"provider_model_id,omitempty"` // concrete model, e.g. openai/gpt-4o-mini
+	Provider        string    `json:"provider,omitempty"`
+	InputTokens     int       `json:"input_tokens"`
+	OutputTokens    int       `json:"output_tokens"`
+	CostUSD         float64   `json:"cost_usd"`
+	Blocked         bool      `json:"blocked,omitempty"`
 }
 
 // RequestLogTracker keeps a bounded in-memory ring of recent request records. A
@@ -61,15 +62,16 @@ func (t *RequestLogTracker) addDecision(d *DecisionEvent) {
 		at = time.Now()
 	}
 	rec := RequestLogRecord{
-		Time:        at,
-		RequestID:   d.RequestID,
-		TaskType:    d.TaskType,
-		RiskLevel:   d.RiskLevel,
-		Model:       d.SelectedModel,
-		Provider:    d.SelectedProvider,
-		InputTokens: d.PromptTokens,
-		CostUSD:     d.EstimatedCostUSD,
-		Blocked:     d.Blocked,
+		Time:            at,
+		RequestID:       d.RequestID,
+		TaskType:        d.TaskType,
+		RiskLevel:       d.RiskLevel,
+		Model:           d.SelectedModel,
+		ProviderModelID: d.ProviderModelID,
+		Provider:        d.SelectedProvider,
+		InputTokens:     d.PromptTokens,
+		CostUSD:         d.EstimatedCostUSD,
+		Blocked:         d.Blocked,
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
