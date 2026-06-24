@@ -73,7 +73,20 @@ func main() {
 		snapErr         error
 	)
 	if orKey := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")); orKey != "" {
-		snap, snapErr = registry.OpenRouterSnapshot()
+		// Per-tier model roster: swap which OpenRouter model fills each tier via
+		// env (e.g. ROUTER_MODEL_PREMIUM=z-ai/glm-4.6), no code change needed.
+		overrides := map[registry.Tier]string{
+			registry.TierCheap:    strings.TrimSpace(os.Getenv("ROUTER_MODEL_CHEAP")),
+			registry.TierBalanced: strings.TrimSpace(os.Getenv("ROUTER_MODEL_BALANCED")),
+			registry.TierPremium:  strings.TrimSpace(os.Getenv("ROUTER_MODEL_PREMIUM")),
+		}
+		def := registry.ApplyProviderModelOverrides(registry.OpenRouterDefinition(), overrides)
+		snap, snapErr = registry.NewSnapshot(def)
+		for tier, slug := range overrides {
+			if slug != "" {
+				logger.Info("model roster override", "tier", string(tier), "model", slug)
+			}
+		}
 		orAdapter := &provider.OpenAIAdapter{
 			BaseURL: "https://openrouter.ai/api/v1",
 			APIKey:  orKey,
