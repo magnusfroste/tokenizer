@@ -76,6 +76,12 @@ type Config struct {
 func New(cfg Config) http.Handler {
 	mux := http.NewServeMux()
 
+	// Bare root → the dashboard, so opening the deployed domain "just works"
+	// instead of returning 404 (this is an API; there is no homepage at /).
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/router/dashboard", http.StatusFound)
+	})
+
 	mux.HandleFunc("GET /healthz", HealthzHandler())
 	mux.HandleFunc("GET /readyz", ReadyzHandler(cfg.Readiness...))
 
